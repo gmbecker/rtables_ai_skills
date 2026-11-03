@@ -11,7 +11,7 @@ This skill provides a systematic framework and complete reference catalog for **
 > **Scope Boundary & Strategy**
 > - **Use this skill** to diagnose what a table's cells represent and to select/parameterize existing production functions passed to `rtables::analyze(..., afun = ..., extra_args = ...)` and `rtables::summarize_row_groups(..., cfun = ..., extra_args = ...)`.
 > - **Prefer `junco` `a_*` / `c_*` / `ac_*` functions** whenever `library(junco)` is available: they plug directly into standard `rtables` layout pipelines (`analyze()` and `summarize_row_groups()`), natively resolve complex spanning headers via `ref_path`, and automatically handle column/row conditionality.
-> - **Out of Scope**: Writing bespoke custom analysis functions (`function(x, df, .var, .spl_context, ...) { in_rows(...) }`) from scratch is covered in a separate custom-`afun` skill. Always verify whether an existing `junco` or `tern` function (with appropriate `extra_args`) satisfies the requirement before resorting to custom code.
+> - **Out of Scope**: Extending/combining existing functions (`make_afun()`, `c(rvs1, rvs2)`, `get_ref_info()`) or writing bespoke custom analysis functions (`function(x, df, .var, .spl_context, ...) { in_rows(...) }`) is covered in `[custom_afuns.md](./custom_afuns.md)`. Always verify whether an existing `junco` or `tern` function (with appropriate `extra_args`) satisfies the requirement before escalating to `[custom_afuns.md](./custom_afuns.md)`.
 
 ---
 
@@ -586,8 +586,8 @@ Before finalizing your `afun`/`cfun` selection, verify all five items:
 2. **Denominator Match**: Is the percentage denominator the column arm total (`denom = "n_altdf"`), a row-subgroup-conditioned arm total (`denom = "n_altdf", denom_by = ...`), the cell sample size (`denom = "n_df"`), or the row total (`denom = "n_rowdf"`)? Is `alt_counts_df = adsl` passed to `build_table()`?
 3. **Column Conditionality Match**: If the layout has non-nested comparison columns or multi-variable sub-columns, does the selected `afun`/`cfun` accept `ref_path` / `riskdiff` / `comp_btw_group` / `multivars` / `colpaths` to populate each column branch appropriately?
 4. **Row Conditionality Match**: Are baseline/screening visits or excluded factor levels properly suppressed via `exclude_visits`, `exclude_levels`, `a_*_with_exclude`, or `a_two_tier(drill_down_levs = ...)`?
-5. **When a Custom `afun`/`cfun` Is Required (Escalate to Custom `afun` Skill)**:
-   - Escalate to writing a custom analysis function **only** when the table shell requires:
+5. **When a Custom `afun`/`cfun` Is Required (Escalate to `[custom_afuns.md](./custom_afuns.md)`)**:
+   - Escalate to `[custom_afuns.md](./custom_afuns.md)` (prioritizing `make_afun()`, `RowsVerticalSection` stacking/dispatch, and `get_ref_info()` over bespoke code) **only** when the table shell requires:
      - A bespoke statistical calculation or custom cell structure not present in `junco` or `tern` (see Section 4 Master Catalog).
      - Arbitrary column-facet dispatch across heterogeneous sibling column branches not covered by `junco`'s built-in risk/mean difference, `a_summarize_aval_chg_diff_j`, `column_stats`, `a_combo_prop_diff_pval_mf`, `resp01_acfun`, `cmp_cfun`, or `lsmeans_wide_cfun` patterns.
      - Custom multi-ancestor denominator arithmetic inspecting `.spl_context$full_parent_df` beyond `n_parentdf` and `denom_by`.
