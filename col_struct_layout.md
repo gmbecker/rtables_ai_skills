@@ -30,7 +30,16 @@ In `rtables`, a table layout (`PreDataTableLayouts`) is a declarative tree of sp
 
 ---
 
-## 2. Visual Topology to API Decision Matrix
+## 2. Decoding Visual Topology
+
+Complete Visual Topology to Implementation Strategy Workflow:
+
+1. **Initial Lookup In Decision Matrix (2.1)**: Attempt to match the full header topology against the lookup matrix; if successful, immediately follow the implementation guidance.
+2. **Infer Column Structure From Visual And Semantic Clues (2.2)**: When a header does not directly match a single entry in 2.1, strip away top-left stub labels and use spanning alignment, repetition of sub-headers, and semantic relationships between adjacent columns to decompose the header into its underlying column tree or constituent sub-structures.
+3. **Second-Pass Lookup In Decision Matrix (2.1)**: Match the normalized structure (or each decomposed sub-branch inferred in Step 2) against the API decision matrix; if successful, immediately follow and combine the implementation guidance.
+4. **Directly Construct Column Structure From API (Sections 3–5)**: Use the core API reference and custom split function mechanics to build the implementation directly.
+
+### 2.1 Quick Lookup Visual Topology to API Decision Matrix
 
 Use this lookup table to map a target visual header structure to the recommended mechanism:
 
@@ -54,6 +63,127 @@ Use this lookup table to map a target visual header structure to the recommended
 | **Per-Parent Data-Driven Quantiles** (Cutpoints recomputed within each Arm) | `make_split_fun(core_split = per_facet_qrt_core("AGE"))` | — |
 | **Overlapping Multi-Variable Predicate Columns** (`Safety \| ITT \| Age >= 65 \| Biomarker High`) | Custom `core_split` evaluating a named list of quoted expressions via `eval(p, df)` | — |
 | **Top-$k$ Frequent Levels + Pooled "Other" Column** | `make_split_fun(post = list(top_k_plus_other_post))` | — |
+
+When no suitable match is found, escalate to semantic decoding of the specific desired topology.
+
+### 2.2 Inferring Column Structure Via Semantic Decoding of Visual Topology
+
+Use the following four rules to infer column structure directly from rendered tables or mock shells.
+
+#### 1. Use Placement of Higher-Level Spanning Labels to Infer Column Structure
+
+**Spanning labels appear centered above the full horizontal width of the child facets nested beneath them.** (In mock shells, this extent may also be marked by underline bars `---`, bracket groups, or parent-level `(N=xx)` counts).
+
+* **Case A — `Total` facet is a direct sibling of treatment level facets (`A: Drug X`, `B: Placebo`, `C: Combination`) *under* the `Treatment` spanning label** (notice `Treatment` is centered across the full width of all 4 columns, columns 1–4):
+
+```text
+                       Treatment                   
+   Total   A: Drug X   B: Placebo   C: Combination
+——————————————————————————————————————————————————
+```
+
+Implementation Guidance: Use a split function that adds a `Total` facet *inside* the treatment (`ARM`) split under the `"span"` parent split (along with any other required behaviors):
+
+```r
+adsl <- ex_adsl
+adsl$span <- "Treatment"
+basic_table() |>
+  split_cols_by("span") |>
+  split_cols_by("ARM", split_fun = add_overall_level("Total"))
+```
+
+* **Case B — `Total` is *outside* the spanning label (and thus outside the `ARM` split)** (notice `Treatment` is shifted right so it is centered only over the 3 arm columns `A: Drug X` through `C: Combination`, columns 2–4, leaving `Total` unspanned on the left):
+
+```text
+                           Treatment               
+   Total   A: Drug X   B: Placebo   C: Combination
+——————————————————————————————————————————————————
+```
+
+Implementation Guidance: Use `add_overall_col("Total")` followed by `nested = FALSE` on the spanning split to separate parallel column subhierarchies:
+
+```r
+adsl <- ex_adsl
+adsl$span <- "Treatment"
+basic_table() |>
+  add_overall_col("Total") |>
+  split_cols_by("span", nested = FALSE) |>
+  split_cols_by("ARM")
+```
+
+**Key Takeaway**: Check which leaf columns a higher-level spanning label is centered across (or underlines) to determine whether a `Total` or comparison column is nested inside that split (`add_overall_level` / `add_combo_levels`) or sits in a sibling subtree (`nested = FALSE` / `add_overall_col`).
+
+#### 2. Repeated Sub-Headers Imply Nesting (`nested = TRUE`); Distinct Sub-Headers Imply Sibling Branches (`nested = FALSE`)
+
+* **Repeated lower-level headers under each parent header** indicate a **nested (crossed) split** (`nested = TRUE`, the default):
+
+```text
+           A: Drug X            B: Placebo     
+        Observed    CFB      Observed    CFB   
+———————————————————————————————————————————————
+```
+
+Implementation Guidance: Chain `split_cols_by("ARM") |> split_cols_by_multivar(c("AVAL", "CHG"), varlabels = c("Observed", "CFB"))` (or `split_cols_by("OUTER") |> split_cols_by("INNER")`).
+
+* **Non-repeating lower-level headers under distinct top-level spanners** indicate **sibling subtrees** (`nested = FALSE` or `add_overall_col("Banner") |> split_cols_by(...)`):
+
+```text
+       Active Treatment                  Risk Differences        
+  A: Drug X   C: Combination   Drug X vs Pbo   Combination vs Pbo
+—————————————————————————————————————————————————————————————————
+```
+
+Implementation Guidance: Because the child columns under `Risk Differences` do not repeat inside `Active Treatment`, `Risk Differences` is a parallel top-level sibling branch (`split_cols_by("rrisk_header", nested = FALSE)` or `grouped_cols_w_diffs()`).
+
+#### 3. Direct Siblings Will Be Semantically Related
+
+**Direct siblings are intended to be understood in the context of each other**, either as:
+- groups/cohorts to be compared (as when splitting on treatment arm), or
+- complementary measures to be considered together (as with a `Mean`, `SD` pair of columns).
+
+For example, `All Active` is semantically parallel to individual treatment arms (a cohort of patients analyzed alongside the individual arms):
+
+```text
+   A: Drug X   B: Placebo   C: Combination   All Active
+———————————————————————————————————————————————————————
+```
+
+Implementation Guidance: Interpret `All Active` as a virtual combination arm within the `ARM` split:
+
+```r
+combodf <- data.frame(
+  valname = "All Active",
+  label = "All Active",
+  levelcombo = I(list(c("A: Drug X", "C: Combination"))),
+  exargs = I(list(list()))
+)
+basic_table() |>
+  split_cols_by("ARM", split_fun = add_combo_levels(combodf))
+```
+
+**Key Takeaway**: Consider whether labels appearing directly adjacent to each other are related semantically when determining whether they should be siblings in the same split (`add_combo_levels` / `add_overall_level`) vs. separate non-nested splits.
+
+#### 4. Interpret Fully Left-Justified / Far-Left Labels as "Top-Left" Materials
+
+**Top-left materials are semantic stub labels that do NOT imply column structure**: they appear above the *row labels* (in the top-left corner to the left of the first data column) in a rendered table or shell. They often describe *row* structure when present, though they can contain any text.
+
+```text
+STRATA1   A: Drug X   B: Placebo   C: Combination
+—————————————————————————————————————————————————
+A                                                
+  Mean      33.08       35.11          34.23     
+B                                                
+  Mean      33.85       36.00          36.33     
+C                                                
+  Mean      34.22       35.18          35.63  
+```
+
+Implementation Guidance: Ignore the far-left `STRATA1` label in the header when inferring column structure; leave top-left population (`label_pos = "topleft"` on `split_rows_by()` or `append_topleft()`) to row structure or final visual tweaks:
+
+```r
+basic_table() |>
+  split_cols_by("ARM") ## top-left population left for row structure / append_topleft()
+```
 
 ---
 
