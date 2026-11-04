@@ -1,6 +1,6 @@
 ---
 name: rtables-junco-table-programming
-description: End-to-end orchestration skill for programming clinical and statistical tables in R using `rtables`, `junco`, and `tern`. Activate this skill whenever translating a complete table shell or specification into working R code. Decomposes any table programming task into three orthogonal sub-tasks—(1) Column Structure (`col_struct_layout.md`), (2) Row Faceting Structure (`row_struct_layout.md`), and (3) Group Summary & Analysis Function Selection (`select_afuns.md` / `selecting_afuns.md`)—and integrates their outputs into a complete, verified `build_table()` implementation.
+description: End-to-end orchestration skill for programming clinical and statistical tables in R using `rtables`, `junco`, and `tern`. Activate this skill whenever translating a complete table shell or specification into working R code. Decomposes any table programming task into orthogonal sub-tasks—(1) Column Structure (`col_struct_layout.md`), (2) Row Faceting Structure (`row_struct_layout.md`), (3) Group Summary & Analysis Function Selection (`select_afuns.md` / `selecting_afuns.md`), with escalation to (4) Custom Analysis Function Construction (`custom_afuns.md`) when no existing function fits—and integrates their outputs into a complete, verified `build_table()` implementation.
 ---
 
 # End-to-End Table Programming in `rtables` & `junco`
@@ -9,12 +9,13 @@ This master skill orchestrates the complete translation of a desired table (typi
 
 > [!IMPORTANT]
 > **Modular Architecture — Defer to Specialist Sub-Skills**
-> Programming a table in `rtables` is governed by **four distinct layout responsibilities** organized across **three specialist sub-skills**. Rather than improvising all aspects at once, always decompose the table and consult the corresponding specialist skill for each part:
+> Programming a table in `rtables` is governed by **four distinct layout responsibilities** organized across **four specialist sub-skills**. Rather than improvising all aspects at once, always decompose the table and consult the corresponding specialist skill for each part:
 > 1. **Column Faceting Structure** $\longrightarrow$ Defer to **[col_struct_layout.md](./col_struct_layout.md)**
 > 2. **Row Faceting Structure** $\longrightarrow$ Defer to **[row_struct_layout.md](./row_struct_layout.md)**
 > 3. **Marginal Group Summary (`cfun`) & Leaf Analysis (`afun`) Selection** $\longrightarrow$ Defer to **[select_afuns.md](./select_afuns.md)** *(also referred to as `selecting_afuns.md`)*
+> 4. **Custom `afun` / `cfun` Extension & Construction (Escalation Only)** $\longrightarrow$ Defer to **[custom_afuns.md](./custom_afuns.md)** **only** when the selection process in [select_afuns.md](./select_afuns.md) confirms that no existing `junco` or `tern` function can satisfy the requirement via `extra_args` alone.
 >
-> Use **this orchestrator skill** to decompose the shell, coordinate the three sub-tasks in order, enforce cross-dimension integration contracts (data preprocessing, `alt_counts_df`, `ref_path`, `denom_by`, `multivars`, and top-left labels), and assemble the final `build_table()` pipeline.
+> Use **this orchestrator skill** to decompose the shell, coordinate the sub-tasks in order, enforce cross-dimension integration contracts (data preprocessing, `alt_counts_df`, `ref_path`, `denom_by`, `multivars`, and top-left labels), and assemble the final `build_table()` pipeline.
 
 ---
 
@@ -49,10 +50,13 @@ flowchart TD
     S1["Stage 1: Decompose Shell & Audit Datasets<br/>(Identify df, alt_counts_df, Header, Row Tree, Cell Specs)"]
     S2["Stage 2: Program Column Structure<br/>(Defer to col_struct_layout.md)<br/>Verify header with build_table(lyt_cols, adsl)"]
     S3["Stage 3: Program Row Faceting Skeleton<br/>(Defer to row_struct_layout.md)<br/>Verify row tree with dummy_one_row / dummy_n_rows_factory"]
-    S4["Stage 4: Evaluate & Select cfun / afun + extra_args<br/>(Defer to select_afuns.md)<br/>Match counting unit, denominator, conditionality & precision"]
+    S4["Stage 4: Evaluate & Select Existing cfun / afun + extra_args<br/>(Defer to select_afuns.md)<br/>Match counting unit, denominator, conditionality & precision"]
+    S4_ESC["Stage 4 Escalation: Extend, Combine, or Construct Custom afun / cfun<br/>(Defer to custom_afuns.md)<br/>Prioritize make_afun, c(rvs1, rvs2), & get_ref_info over bespoke code"]
     S5["Stage 5: Integrate, Synchronize Contracts & Materialize<br/>(Combine lyt_cols + lyt_rows + afuns/cfuns)<br/>Run build_table(lyt, df, alt_counts_df = adsl)"]
 
-    S1 --> S2 --> S3 --> S4 --> S5
+    S1 --> S2 --> S3 --> S4
+    S4 -- "Existing afun/cfun found" --> S5
+    S4 -- "No suitable existing afun/cfun" --> S4_ESC --> S5
 ```
 
 ---
@@ -119,9 +123,9 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
 
 ---
 
-### Stage 4: Evaluate & Select `cfun` and `afun` Functions $\longrightarrow$ Defer to [`select_afuns.md`](./select_afuns.md)
+### Stage 4: Evaluate & Select `cfun` and `afun` Functions $\longrightarrow$ Defer to [`select_afuns.md`](./select_afuns.md) (with Escalation to [`custom_afuns.md`](./custom_afuns.md))
 
-Consult **[select_afuns.md](./select_afuns.md)** (also referred to as `selecting_afuns.md`) to replace every dummy `cfun` and `afun` with the appropriate production function and `extra_args`:
+First, consult **[select_afuns.md](./select_afuns.md)** (also referred to as `selecting_afuns.md`) to replace every dummy `cfun` and `afun` with an existing production function and `extra_args`:
 
 1. **Answer the Three Fundamental Questions for Every `summarize_row_groups()` and `analyze()` Call**:
    - **Unit of Counting / Analysis**:
@@ -137,6 +141,12 @@ Consult **[select_afuns.md](./select_afuns.md)** (also referred to as `selecting
 2. **Configure Specific Requirements**:
    - Statistical test / CI method (`method = "wald"`, `"waldcc"`, `"cmh"`, Mantel-Fleiss `a_proportion_diff_mf`, `ancova = TRUE/FALSE`, etc.).
    - Dynamic decimal precision (`fmt_spec_var_d`, `fmt_spec_df_d`, `format_sigfig_j`, `formats_var = "fmt_d"`, `.formats = "default"`).
+3. **Escalation When No Suitable Existing `afun` / `cfun` Is Found $\longrightarrow$ Defer to [`custom_afuns.md`](./custom_afuns.md)**:
+   - If (and **only** if) the evaluation in [select_afuns.md](./select_afuns.md) determines that no existing `junco` or `tern` function can produce the required rows/cells via `extra_args`, escalate to **[custom_afuns.md](./custom_afuns.md)** and follow its strict reuse-first hierarchy:
+     - **Tier 1 (Wrap with `make_afun`)**: Wrap an existing `s_*` or `a_*` function with `rtables::make_afun()` to lock in `.stats`, `.formats`, `.labels`, `.indent_mods`, `.ungroup_stats`, or curried default arguments.
+     - **Tier 2 (Combine / Mutate `RowsVerticalSection`s)**: Write a thin wrapper that calls existing `afun`s and combines or modifies their returned `RowsVerticalSection` objects—either dispatching between two existing `afun`s across columns via `.spl_context`, stacking multiple existing `afun`s vertically via `c(rvs1, rvs2)`, or adjusting indentation/formats via `indent_mod(rvs) <- ...`.
+     - **Tier 3 (Bridge Reference Group Paths)**: If an existing function expects `.ref_group` and `.in_ref_col` but the layout uses nested spanning headers (`ref_path`) or an Overall column, write a 3-line adapter calling `junco::get_ref_info(ref_path, .spl_context, .var)` and delegating to the existing function.
+     - **Tier 4 (Bespoke `in_rows()` Function)**: Author a fully custom `afun`/`cfun` from scratch **only** when Tiers 1–3 cannot express the calculation, ensuring every column returns the exact same number of rows (even when `nrow(df) == 0`) and uses `.N_col` / `.alt_df_full` rather than `.N_row` or `.N_total` for subject denominators.
 
 ---
 
@@ -188,6 +198,7 @@ When combining column layouts, row layouts, and analysis functions, the followin
     ref_path <- c("TRT01A", "Placebo")
     ```
 - Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`, but passing `ref_path = ref_path` in `extra_args` is always safe and required when building manual `split_cols_by()` comparison branches.
+- **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
 
 ### Contract 3: Subgroup Row Splits + `denom_by` Conditioning
 - Whenever row faceting splits the table by a demographic/baseline subgroup variable (e.g., `split_rows_by("SEX")` or `split_rows_by("AGEGR1")`) and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
@@ -210,6 +221,7 @@ When columns represent multiple variables or statistics rather than pure subpopu
 ### Contract 6: Mixed Nesting Levels (Selective Drill-Down Trade-Off)
 - When a shell displays all levels of a factor at the same indentation level (e.g., `COMPLETED`, `DISCONTINUED`, `ONGOING` from `EOSSTT`), and **only one level** (`DISCONTINUED`) expands into indented child rows (`DCSREAS`):
   - **Preferred Production Pattern**: Do **not** add a second `split_rows_by("DCSREAS")`. Instead, terminate after the outer split (if any) with a single `analyze("EOSSTT", afun = junco::a_two_tier, extra_args = list(inner_var = "DCSREAS", drill_down_levs = "DISCONTINUED", ...))`.
+  - **Custom `afun` Escalation Pattern ([`custom_afuns.md`](./custom_afuns.md))**: If `junco::a_two_tier` cannot accommodate a specialized inner analysis function, escalate to [custom_afuns.md](./custom_afuns.md) (Section 3.5, Pattern 2D) to conditionally stack the existing primary and detail `afun`s using `indent_mod(det_rvs) <- 1L` and `c()`.
   - **Alternative Structural Pattern**: Use `split_rows_by("EOSSTT") |> summarize_row_groups(...) |> split_rows_by("DCSREAS", split_fun = cond_reason_split) |> analyze(...)` followed by `sanitize_table_struct()` or `prune_table()` post-build.
 
 ---
@@ -513,10 +525,11 @@ Before delivering any `rtables` + `junco` table implementation, verify all 8 ite
 3. **Split Function Semantics Verified ([`row_struct_layout.md`](./row_struct_layout.md) & [`col_struct_layout.md`](./col_struct_layout.md))**:
    - Are hierarchically nested variables (`AEBODSYS -> AEDECOD`) trimmed via `trim_levels_in_group()` or `trim_levels_to_map()`?
    - Is `drop_split_levels` avoided on inner splits when a uniform inner factor scale (`SEX`, `AETOXGR`) is required across all outer groups?
-4. **Statistical Function Selection Verified ([`select_afuns.md`](./select_afuns.md))**:
+4. **Statistical Function Selection & Custom Escalation Verified ([`select_afuns.md`](./select_afuns.md) & [`custom_afuns.md`](./custom_afuns.md))**:
    - Does the selected `afun`/`cfun` count the right unit (unique subjects vs. events vs. worst grade vs. person-years)?
    - Does `denom` (and `denom_by` for subgroup tables) match the target denominator population?
    - Does the `afun`/`cfun` handle all column-conditional and row-conditional facets (risk differences, baseline visit exclusions, selective drill-downs)?
+   - If no existing `afun`/`cfun` fit and you escalated to [`custom_afuns.md`](./custom_afuns.md), did you prioritize reusing/extending existing functions (`make_afun()`, `c(rvs1, rvs2)`, `junco::get_ref_info()`) over bespoke code, and does the custom function return identical row counts and row names across all columns (including 0-row facets)?
 5. **Dataset Synchronization (`df` vs. `alt_counts_df`)**:
    - Is `alt_counts_df = adsl` passed to `build_table()` for all event/repeated-measures tables?
    - Do all column-split variables and `denom_by` variables exist with identical factor levels on both `df` and `alt_counts_df`?
