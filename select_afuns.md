@@ -11,7 +11,8 @@ This skill provides a systematic framework and complete reference catalog for **
 > **Scope Boundary & Strategy**
 > - **Use this skill** to diagnose what a table's cells represent and to select/parameterize existing production functions passed to `rtables::analyze(..., afun = ..., extra_args = ...)` and `rtables::summarize_row_groups(..., cfun = ..., extra_args = ...)`.
 > - **Prefer `junco` `a_*` / `c_*` / `ac_*` functions** whenever `library(junco)` is available: they plug directly into standard `rtables` layout pipelines (`analyze()` and `summarize_row_groups()`), natively resolve complex spanning headers via `ref_path`, and automatically handle column/row conditionality.
-> - **Out of Scope**: Extending/combining existing functions (`make_afun()`, `c(rvs1, rvs2)`, `get_ref_info()`) or writing bespoke custom analysis functions (`function(x, df, .var, .spl_context, ...) { in_rows(...) }`) is covered in `[custom_afuns.md](./custom_afuns.md)`. Always verify whether an existing `junco` or `tern` function (with appropriate `extra_args`) satisfies the requirement before escalating to `[custom_afuns.md](./custom_afuns.md)`.
+> - **After selecting a function**, escalate to its **expert usage skill** if one exists (see Section 3.1 below) for detailed parameterization, gotchas, and worked examples. If no expert skill exists, continue with the general reference in Sections 4–7 of this document.
+> - **When no existing function satisfies the requirement**, escalate to `[custom_afuns.md](./custom_afuns.md)` for extending/combining existing functions (`make_afun()`, `c(rvs1, rvs2)`, `get_ref_info()`) or writing bespoke custom analysis functions (`function(x, df, .var, .spl_context, ...) { in_rows(...) }`). Always verify whether an existing `junco` or `tern` function (with appropriate `extra_args`) satisfies the requirement before escalating.
 
 ---
 
@@ -173,7 +174,28 @@ Use this decision matrix to map your table shell's analytical requirement to the
 | **RESP01 Response Table (Arm Proportions/CIs + Overall RR/OR/p-val)** | **`junco::resp01_acfun`** & **`resp01_counts_cfun`** | `afun` & `cfun` | Pair with `resp01_split_fun_fct`; `methods`, `arm`, `strata`, `include_comp` |
 | **Study Visit Compliance Table (`Expected`, `Received`, `Missing`)** | **`junco::cmp_cfun`** | `cfun` | `variables = list(expected = ..., received = ..., missing = ...)` |
 | **Wide-Format ANCOVA LS Means Table** | **`junco::lsmeans_wide_cfun`** | `cfun` | `ref_level`, `treatment_levels`, `pval_sided`, `conf_level` |
-| **Blank Spacer Row in Layout** | **`junco::ac_blank_line`** | `afun` & `cfun` | Inserts empty row formatted as `""` |
+| **Blank Spacer Row in Layout** | **`junco::ac_blank_line`** | `afun` & `cfun` | Inserts empty row formatted as `""`. **⚠️ Not a substitute for a real `afun`**: only use (1) as a visual spacer `analyze()` between two substantive analysis sections (or via `insert_blank_line()`), or (2) as a `cfun` in `summarize_row_groups(cfun = ac_blank_line)` paired with `split_rows_by(..., child_labels = "visible")` to insert a blank line between a visible facet label row and its child rows. Never use as the sole terminating `afun` of a `split_rows_by()` chain — see No-Op `analyze()` Anti-Pattern in [`row_struct_layout.md`](./row_struct_layout.md). |
+
+---
+
+## 3.1 Post-Selection Escalation: Expert Usage Skills
+
+Once you have identified the correct `afun`/`cfun` from the decision matrix above, check whether a **dedicated expert usage skill** exists for that function. Expert skills provide exhaustive parameter documentation, internal mechanics, worked examples, and gotcha catalogs that go far beyond what this selection guide covers.
+
+**Escalation routing table:**
+
+| Selected Function(s) | Expert Skill Document | Covers |
+| :--- | :--- | :--- |
+| `a_freq_j`, `a_freq_j_with_exclude` | [`junco_a_freq_j_usage.md`](./junco_a_freq_j_usage.md) | All `.stats`, denominator control (`denom`, `denom_by`, `colgroup`, `countsource`), risk difference methods, level filtering/manipulation (`val`, `drop_levels`, `excl_levels`, `new_levels`), `label_map` (4 modes), `restr_columns`, formatting, internal mechanics, 13 gotchas |
+| `a_eair100_j`, `a_eair_strat_j`, `a_patyrs_j` | [`junco_eair_family_usage.md`](./junco_eair_family_usage.md) | Person-years calculation, 11 statistics each, horizontal/vertical risk diff layouts, 4 rate CI methods, 4 difference CI methods, `occ_var`/`occ_dy`/`fup_var` wiring, 5 worked examples, 8 gotchas |
+| `a_summarize_aval_chg_diff_j` | [`junco_a_summarize_aval_chg_diff_j_usage.md`](./junco_a_summarize_aval_chg_diff_j_usage.md) | Per-column `.stats`/`.formats` as named lists (`col1`, `col23`, `coldiff`), `split_cols_by_multivar` integration, descriptive vs ANCOVA mode, sparse data handling, combined group support, 3 examples, 8 gotchas |
+| `a_cond_proportion_j`, `a_proportion_diff_mf`, `a_test_proportion_diff_mf` | [`junco_adaptive_proportion_diff_usage.md`](./junco_adaptive_proportion_diff_usage.md) | Adaptive method selection, Mantel-Fleiss criterion, footnote injection, CMH method options, combined usage pattern, 10 gotchas |
+
+**Escalation rule** (applies only when a suitable function WAS identified):
+1. If the selected function appears in the table above → **activate the linked expert skill** for detailed parameterization, gotchas, and worked examples.
+2. If the selected function does NOT appear in the table above → **continue with the general reference** in Sections 4–7 of this document, supplemented by the canonical layout recipes in Section 7.
+
+> Note: This escalation is independent of the `[custom_afuns.md](./custom_afuns.md)` escalation, which applies only when **no** existing function satisfies the requirement (see Section 8, item 5).
 
 ---
 
@@ -230,7 +252,7 @@ Use this decision matrix to map your table shell's analytical requirement to the
 | **`lsmeans_wide_cfun`** | `cfun` | Content function for wide-format ANCOVA LS means table layouts, organizing estimates, MSE, df, contrasts, and p-values across multi-tiered columns. | Reference/Testing cols: `treatment`, `n`, `lsmean`, `se`; Variance col: `mse`, `df`; Comparison col: `lsmean` (difference in LS means), `se`, `ci`, `pval`. | N/A. | `ref_level`, `treatment_levels`, `pval_sided` (`"2"`, `"1"`, `"-1"`), `conf_level`, `formats`. |
 | **`c_row_counts`** | `cfun` *(internal)* | Content function to count rows in current data split (`nrow(df)`). Wrapped by `summarize_row_counts(alt_counts = FALSE)`. | `count` (`nrow(df)`). | N/A. | `label_fstr` (`sprintf` string using `labelstr`, default `"%s"`). |
 | **`c_row_counts_alt`** | `cfun` *(internal)* | Content function to count rows in alternative dataset (`nrow(.alt_df)`). Wrapped by `summarize_row_counts(alt_counts = TRUE)`. | `count` (`nrow(.alt_df)`). | N/A. | `label_fstr`. |
-| **`ac_blank_line`** | `afun` / `cfun` | Formatted analysis and content function producing a blank row gap in table layouts with invisible `NA` string (`""`). | Single blank cell (`NA_real_` formatted as `""`). | N/A. | `labelstr` (row label string, default `""`). |
+| **`ac_blank_line`** | `afun` / `cfun` | Formatted analysis and content function producing a blank row gap in table layouts with invisible `NA` string (`""`). **⚠️ Legitimate uses only**: (1) as a visual spacer `analyze()` between two substantive analysis sections (or via `insert_blank_line()`), or (2) as a `cfun` in `summarize_row_groups(cfun = ac_blank_line)` paired with `split_rows_by(..., child_labels = "visible")` to insert a blank line between a visible facet label row and its child rows. **Never use as the sole terminating `afun` of a `split_rows_by()` chain** — this is the No-Op `analyze()` Anti-Pattern (see [`row_struct_layout.md`](./row_struct_layout.md)). | Single blank cell (`NA_real_` formatted as `""`). | N/A. | `labelstr` (row label string, default `""`). |
 
 > [!CAUTION]
 > **Deprecated `junco` Functions — Do Not Select**
@@ -395,7 +417,7 @@ Select `a_sum_ratio_j` when tabulating cumulative sums (`sum`, `sum_unique`) and
    - Select as `cfun` for wide-format ANCOVA layouts displaying Reference Group (`n`, `lsmean`, `se`), Testing Group (`n`, `lsmean`, `se`), Variance (`mse`, `df`), and Comparison (`lsmean` diff, `se`, `ci`, `pval`) across columns.
 4. **`c_row_counts`, `c_row_counts_alt`, `ac_blank_line`**:
    - `c_row_counts` / `c_row_counts_alt`: Count rows in `df` or `.alt_df` (wrapped by `summarize_row_counts()`).
-   - `ac_blank_line`: Inserts a blank spacing row (`""`) as either a `cfun` or `afun`.
+   - `ac_blank_line`: Inserts a blank spacing row (`""`) as either a `cfun` or `afun`. **Only** for (1) visual spacers between substantive analysis sections, or (2) as `cfun` in `summarize_row_groups(cfun = ac_blank_line)` with `split_rows_by(..., child_labels = "visible")` to separate a visible facet label from its children. **Never** use as the sole terminating `afun` of a `split_rows_by()` chain (No-Op Anti-Pattern).
 
 ---
 
@@ -413,7 +435,7 @@ Standard `rtables` `ref_group` only works within a single flat `split_cols_by()`
   # When using a flat single-level column split on "TRT01A":
   ref_path <- c("TRT01A", "Placebo")
   ```
-- **Automatic Injection with `grouped_cols_w_diffs()`**: When you construct columns with `junco::grouped_cols_w_diffs(trt_map, ...)`, `ref_path` is automatically injected into the `extra_args` of the comparison columns. When building the column layout manually with `split_cols_by()`, pass `ref_path = ref_path` explicitly inside `extra_args` of your `afun`/`cfun`.
+- **Automatic Injection with `grouped_cols_w_diffs()`**: When you construct columns with `junco::grouped_cols_w_diffs(trt_map, ...)`, `ref_path` is automatically injected into the `extra_args` of the comparison columns, **do not pass it via `extra_args` to your `afun`/`cfun` in this case**. When building the column layout manually with `split_cols_by()`, pass `ref_path = ref_path` explicitly inside `extra_args` of your `afun`/`cfun`.
 
 ---
 
@@ -578,7 +600,7 @@ tbl <- build_table(lyt, advs, alt_counts_df = adsl)
 
 ---
 
-## 8. Diagnostic Checklist & When to Escalate to a Custom `afun`
+## 8. Diagnostic Checklist & Escalation Path
 
 Before finalizing your `afun`/`cfun` selection, verify all five items:
 
@@ -586,8 +608,9 @@ Before finalizing your `afun`/`cfun` selection, verify all five items:
 2. **Denominator Match**: Is the percentage denominator the column arm total (`denom = "n_altdf"`), a row-subgroup-conditioned arm total (`denom = "n_altdf", denom_by = ...`), the cell sample size (`denom = "n_df"`), or the row total (`denom = "n_rowdf"`)? Is `alt_counts_df = adsl` passed to `build_table()`?
 3. **Column Conditionality Match**: If the layout has non-nested comparison columns or multi-variable sub-columns, does the selected `afun`/`cfun` accept `ref_path` / `riskdiff` / `comp_btw_group` / `multivars` / `colpaths` to populate each column branch appropriately?
 4. **Row Conditionality Match**: Are baseline/screening visits or excluded factor levels properly suppressed via `exclude_visits`, `exclude_levels`, `a_*_with_exclude`, or `a_two_tier(drill_down_levs = ...)`?
-5. **When a Custom `afun`/`cfun` Is Required (Escalate to `[custom_afuns.md](./custom_afuns.md)`)**:
-   - Escalate to `[custom_afuns.md](./custom_afuns.md)` (prioritizing `make_afun()`, `RowsVerticalSection` stacking/dispatch, and `get_ref_info()` over bespoke code) **only** when the table shell requires:
+5. **Post-Selection Escalation** (two independent decision points):
+   - **A suitable function WAS identified** → Check the Section 3.1 routing table. If an expert usage skill exists for that function, activate it for detailed parameterization, gotchas, and worked examples. Otherwise, continue with the general reference in Sections 4–7 of this document.
+   - **No suitable function was identified** → Escalate to `[custom_afuns.md](./custom_afuns.md)` (prioritizing `make_afun()`, `RowsVerticalSection` stacking/dispatch, and `get_ref_info()` over bespoke code) when the table shell requires:
      - A bespoke statistical calculation or custom cell structure not present in `junco` or `tern` (see Section 4 Master Catalog).
      - Arbitrary column-facet dispatch across heterogeneous sibling column branches not covered by `junco`'s built-in risk/mean difference, `a_summarize_aval_chg_diff_j`, `column_stats`, `a_combo_prop_diff_pval_mf`, `resp01_acfun`, `cmp_cfun`, or `lsmeans_wide_cfun` patterns.
      - Custom multi-ancestor denominator arithmetic inspecting `.spl_context$full_parent_df` beyond `n_parentdf` and `denom_by`.
