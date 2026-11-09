@@ -119,6 +119,10 @@ a_base_summary <- make_afun(
 
 Every modern `afun` and `cfun` in `rtables`, `tern`, and `junco` returns the result of `in_rows()`, which is a **`RowsVerticalSection`** object. Understanding what a `RowsVerticalSection` contains—and how to manipulate and combine it—lets you build complex composite analysis functions by orchestrating existing `afun`s.
 
+> [!IMPORTANT]
+> **Mandatory a/cfun Argument Invariant**:
+> - When constructing a custom afun that wraps one or more existing afuns, the custom function must accept - and appropriately pass-through - the union of all rtables special arguments (see Section 5.2) accepted by the wrapped existing afuns. Use the afuns' documentation or call `formals()` to determine what arguments the existing afuns expect.
+
 ### 3.1 Anatomy & Accessors of a `RowsVerticalSection` Object
 
 A `RowsVerticalSection` wraps a list of `CellValue` (`rcell`) objects alongside **row-level** metadata. Note that during table construction, **only the first (left-most) column's `RowsVerticalSection`** dictates row-level names, labels, indent modifiers, row formats, row NA strings, and row footnotes.
@@ -146,12 +150,18 @@ in_diff_col <- function(spl_context) {
   any(grepl("Risk Differences", spl_context$cur_col_split_val[[1]], fixed = TRUE))
 }
 
-# Dispatcher wrapping two existing afuns
-col_dispatch_afun <- function(df, .var, ..., .spl_context) {
+# Suppose main_behavior_afun needs .N_col and .spl_context,
+# while alt_behavior_afun needs .ref_group, .in_ref_col, and .spl_context.
+# The wrapper must accept the UNION of both sets (Mandatory a/cfun Argument Invariant)
+# so that rtables populates all of them; each inner call receives only what it needs.
+col_dispatch_afun <- function(df, .var, .N_col, .ref_group, .in_ref_col, .spl_context, ...) {
   if (in_diff_col(.spl_context)) {
-    alt_behavior_afun(df = df, .var = .var, ..., .spl_context = .spl_context)
+    alt_behavior_afun(df = df, .var = .var,
+                      .ref_group = .ref_group, .in_ref_col = .in_ref_col,
+                      .spl_context = .spl_context, ...)
   } else {
-    main_behavior_afun(df = df, .var = .var, ..., .spl_context = .spl_context)
+    main_behavior_afun(df = df, .var = .var,
+                       .N_col = .N_col, .spl_context = .spl_context, ...)
   }
 }
 ```
@@ -176,7 +186,8 @@ col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
 > [!IMPORTANT]
 > **Mandatory Row-Count Invariant Across Columns**:
 > For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns $k$ rows (e.g., `n` plus 4 factor levels = 5 rows), `alt_behavior_afun` must also return $k$ rows in the same order (using blank `rcell(NULL)` cells for rows where no comparison statistic applies, such as `n`).
-> When constructing the per-column behavior functions, independently re-apply the full afun selection-and-construction pipeline (select_afuns.md then this skill) from the beginning for each distinct behavior — preferring existing junco/tern functions before writing bespoke ones.
+> **Mandatory Orthogonal Afun Selection For Column-Conditional Behavior**:
+> - When constructing the per-column behavior functions, independently re-apply the full afun selection-and-construction pipeline (select_afuns.md then this skill) from the beginning for each distinct behavior — preferring existing junco/tern functions before writing bespoke ones.
 
 ### 3.3 Pattern 2B: Vertical Stacking of Existing `afun`s (`c(rvs1, rvs2)`)
 
@@ -195,6 +206,23 @@ stacked_afun <- function(df, .var, .N_col, .spl_context, ...) {
   
   # 3. Combine and return as a single RowsVerticalSection
   c(rvs_events, rvs_pats)
+}
+```
+
+#### Special Case: Adding A Combination Level
+
+Suppose we need an afun which tabulates a categorical variable with levels `None`, `Low` and `High` 
+and we need a new combination level `Any Present` which combines `Low` and `High`; we can do this 
+by calling the desired function for the standard levels and adding the row for our new combination
+level by combining the result with one we construct directly.
+
+```r
+add_any_row <- function(df, .var, ...) {
+  main_ret <- regular_afun(df, .var, ...) ## a different approach is needed if the afun does not accept the df, .var pairing
+  tmpdf <- df[df[[.var]] != "None", ]
+  tmpdf[[.var]] <- factor("Any Present") ## spoof our new level, this is ok because we are in an afun and our data isn't going anywhere
+  addl_ret <- regular_afun(tmpdf, .var, ...) ## get the same behavior we got for main_ret but on our new combination level
+  c(main_ret, addl_ret)
 }
 ```
 

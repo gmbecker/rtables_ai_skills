@@ -360,7 +360,7 @@ basic_table(show_colcounts = TRUE) |>
 
 ---
 
-### Archetype 3: Clinical Laboratory / Toxicity Shift Table
+### Archetype 3: Shift Table (Clinical Laboratory / Toxicity)
 
 #### Primary Solution (using `junco`):
 ```r

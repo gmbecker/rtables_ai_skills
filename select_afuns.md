@@ -19,7 +19,7 @@ This skill provides a systematic framework and complete reference catalog for **
 ## 1. Architectural Paradigm: `rtables`, `junco`, and `tern`
 
 1. **Role of `cfun` vs. `afun` in `rtables`**:
-   - **`cfun` (Content Function)**: Passed to `summarize_row_groups(lyt, var, cfun = ..., extra_args = ...)`. Generates one or more summary rows at a **row-split group header level** (e.g., summarizing an entire System Organ Class `AEBODSYS`, subgroup `SEX`, or overall `TRTEMFL == "Y"` cohort before indenting into child rows).
+   - **`cfun` (Content Function)**: Passed to `summarize_row_groups(lyt, var, cfun = ..., extra_args = ...)`. Generates one or more summary rows at a **row-split group header level** (e.g., summarizing an entire System Organ Class `AEBODSYS`, subgroup `SEX`, or overall `TRTEMFL == "Y"` cohort before indenting into child rows). **`var` must be specified in calls to `summarize_row_groups` when the selected `cfun` accepts `.var` as an argument. The default row summary behavior does not require this.**
    - **`afun` (Analysis Function)**: Passed to `analyze(lyt, vars, afun = ..., extra_args = ...)`. Generates the **individual data rows** at the leaf (or current) level of the row tree (e.g., Preferred Terms `AEDECOD`, numeric summary rows for `AGE` or `AVAL`, model contrasts).
 2. **Direct `afun`/`cfun` Paradigm (`junco`) vs. Layout Wrappers (`tern`)**:
    - In **`tern`**, tables are often built with high-level layout wrapper functions (e.g., `count_occurrences()`, `summarize_occurrences()`, `analyze_num_patients()`, `summarize_vars()`) that internally call `rtables::analyze()` or `rtables::summarize_row_groups()`, though underlying analysis functions like `tern::a_summary` or `tern::a_surv_time` can also be passed directly to `analyze()`.
