@@ -29,7 +29,7 @@ Every `rtables` layout (`PreDataTableLayouts`, initialized with `basic_table()`)
 | Building Block | Primary API Family | What It Does | Specialist Skill |
 | :--- | :--- | :--- | :--- |
 | **1. Column Structure** | `split_cols_by*()`, `grouped_cols_w_diffs()`, `grouped_cols_w_subgrps()`, `shift_tbl_col_struct()`, `some_v_all_col_struct()`, `add_overall_col()`, `add_colcounts()` | Defines leaf columns, spanning headers, column subsetting expressions, and header `(N=xx)` counts. **Nothing else affects column structure.** | [col_struct_layout.md](./col_struct_layout.md) |
-| **2. Row Faceting Structure** | `split_rows_by*()` (`split_rows_by`, `_cuts`, `_cutfun`, `_quartiles`, `_multivar`) | Partitions data into hierarchical row groups, controls nesting (`nested`, `at_sibling`), and configures facet labels (`label_pos`, `child_labels`), dividers (`section_div`), and pagination (`page_by`). **Does not create leaf rows on its own.** | [row_struct_layout.md](./row_struct_layout.md) |
+| **2. Row Faceting Structure** | `split_rows_by*()` (`split_rows_by`, `_cuts`, `_cutfun`, `_quartiles`, `_multivar`) | Partitions data into hierarchical row groups, controls nesting (`nested`, `at_sibling`), and configures facet labels (`label_pos`, `child_labels`), dividers (`section_div`), and pagination (`page_by`, `split_rows_by()` only). **Does not create leaf rows on its own.** | [row_struct_layout.md](./row_struct_layout.md) |
 | **3. Marginal Group Summary Rows** | `summarize_row_groups(..., cfun = ...)` | Attaches a content function (`cfun`) to the immediately preceding `split_rows_by*()` (or root), replacing or augmenting each facet's label row with marginal summary cells. | Placement: [row_struct_layout.md](./row_struct_layout.md)<br>Function choice: [select_afuns.md](./select_afuns.md)<br>Custom/extended `cfun`: [custom_afuns.md](./custom_afuns.md) |
 | **4. Individual Analysis Leaf Rows** | `analyze(..., afun = ...)` | Terminates a row-faceting branch by applying an analysis function (`afun`) to the intersection of each `(row_facet, col_facet)` data subset to generate one or more leaf rows. | Placement: [row_struct_layout.md](./row_struct_layout.md)<br>Function choice: [select_afuns.md](./select_afuns.md)<br>Custom/extended `afun`: [custom_afuns.md](./custom_afuns.md) |
 
@@ -120,6 +120,10 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
    - Set `label_pos = "topleft"` on outer splits when variable titles belong in the top-left corner above row labels; set `label_pos = "visible"` when variable titles appear as in-body section header rows.
 5. **Isolated Prototyping with Dummy Functions**:
    - Test `lyt_rows` using `dummy_one_row` and `dummy_n_rows_factory(k)` from [row_struct_layout.md](./row_struct_layout.md) to verify indentation, section dividers, and label visibility before introducing statistical functions.
+6. **Page-By Splits for Per-Facet Pagination**:
+   - When the table specification calls for a separate page per level of an outer variable (e.g., one page per lab parameter or per subgroup), use `split_rows_by(var, page_by = TRUE, page_prefix = "...")` as the outermost row split.
+   - `page_by` splits must be the outermost row structure — they cannot have top-level siblings or be nested inside non-`page_by` splits. When wrapping a multi-section layout with a `page_by` split, all inner sections must use `at_sibling` anchoring (not `nested = FALSE`) to stay inside the `page_by` facet.
+   - `page_by` only takes effect during pagination (`paginate_table()`, `export_as_txt()`, `export_as_pdf()`). When printed at the console or via `toString()` — neither of which paginates — the split renders as an ordinary row split.
 
 ---
 
@@ -506,6 +510,7 @@ When adapting an existing template layout script rather than starting from scrat
    - **Check `at_sibling` anchors**: If you remove the first section of a layout and later sections were anchored to it via `at_sibling = "<first_var>"`, update `at_sibling` on the remaining sections to point to the new first section.
 2. **Wrapping an Existing Multi-Section Layout into a Subgroup Table**:
    - If you prepend an outer subgroup split (e.g., `split_rows_by("STRATA1", page_by = TRUE)`) to a multi-section layout, ensure every subsequent top-level section in the template uses **`at_sibling = "<first_section_var>"`** rather than `nested = FALSE` (or implicit post-`analyze` un-nesting). Otherwise, sections 2+ will escape outside `STRATA1` to the root of the table.
+   - **Important**: The `at_sibling` anchor must point to a *child* of the `page_by` split (e.g., the first inner split or analyze), never to the `page_by` split itself — `at_sibling` targeting a `page_by` split raises an error.
 3. **Turning Off Comparison / Risk Difference Columns**:
    - In `grouped_cols_w_diffs(trt_map, diff_cols = FALSE)`, setting `diff_cols = FALSE` removes the difference columns cleanly; in `a_freq_j` or `a_summarize_aval_chg_diff_j`, also set `riskdiff = FALSE` or `comp_btw_group = FALSE` in `extra_args`.
 

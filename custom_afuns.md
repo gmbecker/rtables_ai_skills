@@ -176,6 +176,7 @@ col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
 > [!IMPORTANT]
 > **Mandatory Row-Count Invariant Across Columns**:
 > For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns $k$ rows (e.g., `n` plus 4 factor levels = 5 rows), `alt_behavior_afun` must also return $k$ rows in the same order (using blank `rcell(NULL)` cells for rows where no comparison statistic applies, such as `n`).
+> When constructing the per-column behavior functions, independently re-apply the full afun selection-and-construction pipeline (select_afuns.md then this skill) from the beginning for each distinct behavior — preferring existing junco/tern functions before writing bespoke ones.
 
 ### 3.3 Pattern 2B: Vertical Stacking of Existing `afun`s (`c(rvs1, rvs2)`)
 
@@ -286,7 +287,7 @@ bridged_diff_afun <- function(x, ref_path, .spl_context, .var) {
 
 ## 5. Tier 4: Core Mechanics for Writing Bespoke `afun`s and `cfun`s
 
-When Tiers 0–3 cannot satisfy a requirement, write a custom function following `rtables`' formal contracts.
+When Tiers 0–3 cannot satisfy a requirement, write a custom function following `rtables`' formal contracts. A fundamental contract is that **an `afun`/`cfun` must never read precomputed cell values or analysis results from the enclosing or global environment**. All cell values must be computed within the function body from the data and special arguments `rtables` passes to it, or retrieved from an environment cache populated by a prior `afun` call during the same `build_table()` execution (see Building Block 3, Section 7). Note that function factories which capture *configuration* (thresholds, method names, format strings, variable names) from their enclosing scope are fine — the prohibition is specifically against using closures or globals to inject precomputed data or results that should be derived from the faceted data subsets `rtables` provides.
 
 ### 5.1 Unified `afun` / `cfun` Function Template
 
@@ -512,4 +513,6 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
    - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with `alt_counts_df = adsl`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
 5. **Dual `afun`/`cfun` Compatibility**:
    - If the function is used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal parameter and assign `labelstr` to the returned row label?
+6. **No Precomputed Cell Values Via External State**:
+   - Does the function compute all cell values from its inputs (`df`/`x`, `.spl_context`, `.N_col`, etc.) rather than reading precomputed analysis results from the enclosing or global environment? Function factories capturing configuration parameters and environment caching per Building Block 3 are permitted; smuggling in precomputed data or results is not.
 

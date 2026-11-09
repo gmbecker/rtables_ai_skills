@@ -1,6 +1,6 @@
 ---
 name: rtables-row-structure-programming
-description: Design, translate, and implement table row faceting structures in R using the `rtables` (and `junco` layout helper) packages. Activate this skill whenever the user wants to translate a table shell's row hierarchy into an `rtables` layout, program nested or multi-section row splits (`split_rows_by`, `split_rows_by_cuts`, `split_rows_by_cutfun`, `split_rows_by_quartiles`, `split_rows_by_multivar`), control row nesting (`nested = FALSE`, `at_sibling`), place marginal group summary rows (`summarize_row_groups`), configure row split functions (`drop_split_levels`, `keep_split_levels`, `remove_split_levels`, `reorder_split_levels`, `add_overall_level`, `add_combo_levels`, `trim_levels_in_group`, `trim_levels_to_map`, `make_split_fun`, `make_combo_splitfun`), or manage row label visibility and placement (`label_pos`, `child_labels`, `show_labels`, `section_div`, `page_by`, `indent_mod`, `table_names`). Does not cover column structure or the statistical internals of `afun`/`cfun` functions.
+description: Design, translate, and implement table row faceting structures in R using the `rtables` (and `junco` layout helper) packages. Activate this skill whenever the user wants to translate a table shell's row hierarchy into an `rtables` layout, program nested or multi-section row splits (`split_rows_by`, `split_rows_by_cuts`, `split_rows_by_cutfun`, `split_rows_by_quartiles`, `split_rows_by_multivar`), control row nesting (`nested = FALSE`, `at_sibling`), place marginal group summary rows (`summarize_row_groups`), configure row split functions (`drop_split_levels`, `keep_split_levels`, `remove_split_levels`, `reorder_split_levels`, `add_overall_level`, `add_combo_levels`, `trim_levels_in_group`, `trim_levels_to_map`, `make_split_fun`, `make_combo_splitfun`), manage row label visibility and placement (`label_pos`, `child_labels`, `show_labels`, `section_div`, `indent_mod`, `table_names`), or configure page-by pagination splits (`page_by`, `page_prefix` on `split_rows_by()` only). Does not cover column structure or the statistical internals of `afun`/`cfun` functions.
 ---
 
 # `rtables` Row Faceting Structure Programming Skill
@@ -257,8 +257,17 @@ Row labels are controlled by three distinct parameters across two levels of the 
   - `basic_table(top_level_section_div = "-")` (or `" "`): Inserts a divider line after each top-level row section.
   - `split_rows_by("AEBODSYS", section_div = " ")` (or `"="`, `"~"`): Inserts a divider line after each facet of that row split.
   - `junco::insert_blank_line()`: Inserts an empty spacer row between consecutive `analyze()` calls in a layout pipeline.
-- **`page_by = TRUE`**:
-  - Passing `page_by = TRUE` to one or more outer `split_rows_by*()` calls declares page-by row splitting (each facet starts a separate logical page with its own page-by header during pagination/export).
+- **`page_by = TRUE` (on `split_rows_by()` only)**:
+  - Declares a page-by row split: during pagination, each facet starts a separate logical page with an auto-generated page title. **Not available on `split_rows_by_cuts`, `split_rows_by_cutfun`, `split_rows_by_quartiles`, or `split_rows_by_multivar`.**
+  - **When `page_by` Takes Effect**: Page-by splitting only manifests when the table is actually paginated — i.e., via `paginate_table()`, `export_as_txt()` (which paginates by default), or `export_as_pdf()`. When a table is printed at the console (`print(tbl)`) or rendered via `toString(tbl)` — neither of which performs pagination — the `page_by` split renders as an ordinary row split with no page separation or page titles.
+  - **`page_prefix`**: Controls the prefix in the auto-generated page title `"<page_prefix>: <split_value>"`. Defaults to `split_label` (which itself defaults to `var`).
+  - **Placement Constraints**:
+    1. A `page_by` split **must be the outermost row split** — it cannot have top-level siblings (no `analyze()` or `split_rows_by()` before or after it at the root level).
+    2. A `page_by` split **cannot be nested inside a non-`page_by` split**. It can only nest inside another `page_by` split (producing stacked page titles).
+    3. A `page_by` split **cannot be the target of `at_sibling`** — attempting to anchor a sibling to a `page_by` split raises an error.
+  - **Nesting Multiple `page_by` Splits**: When `page_by` splits are nested (e.g., `split_rows_by("SEX", page_by = TRUE) |> split_rows_by("STRATA1", page_by = TRUE)`), each resulting page carries one page title line per `page_by` level.
+  - **`label_pos` Interaction**: Use `label_pos = "hidden"` to suppress the facet label row in the table body (the value appears only in the page title). Use `label_pos = "topleft"` to place the split variable name in the top-left corner while the facet value appears in the page title.
+  - **Zero-Observation Error**: If a `page_by` split produces zero pages (e.g., all `NA` values or empty data after `split_fun = drop_split_levels` on empty data), `build_table()` throws an error.
 
 ---
 
@@ -455,6 +464,8 @@ Use this lookup table to map any desired visual row structure to its canonical `
 | **14** | **Trimmed Outer Split $\times$ Complete Inner Scale with Leading Subtotal (`Any Grade`, `1`..`5`)** | `basic_table() \|> split_rows_by("AEBODSYS", split_fun = keep_split_levels(c("cl A.1", "cl B.1"))) \|> split_rows_by("AETOXGR", split_fun = add_overall_level("Any Grade", first = TRUE)) \|> summarize_row_groups("USUBJID", cfun = ...) \|> analyze("AGE", afun = ...)` |
 | **15** | **Parameter $\to$ Hidden Visit Child Labels (`AVISIT` Labelled by `afun`)** | `basic_table() \|> split_rows_by("PARAM", label_pos = "topleft", split_fun = drop_split_levels) \|> split_rows_by("AVISIT", label_pos = "topleft", split_fun = drop_split_levels, child_labels = "hidden") \|> analyze("STUDYID", afun = ...)` |
 | **16** | **Mixed Nesting Levels (Selective Drill-Down on Only `"DISCONTINUED"`)** | **Option A (Preferred 2-tier `analyze`)**: `split_rows_by("RACE") \|> analyze("EOSSTT", afun = a_two_tier, extra_args = list(inner_var = "DCSREAS", drill_down_levs = "DISCONTINUED"))`<br>**Option B (Asymmetric `core_split`)**: `split_rows_by("EOSSTT") \|> summarize_row_groups("USUBJID", cfun = ...) \|> split_rows_by("DCSREAS", split_fun = cond_reason_split) \|> analyze("USUBJID", afun = ...)` |
+| **17** | **Page-By Outer Split (Separate Page Per Facet)** | `basic_table(title = "...") \|> split_rows_by("PARAMCD", page_by = TRUE, page_prefix = "Parameter", split_fun = drop_split_levels) \|> split_rows_by("AVISIT", split_fun = drop_split_levels) \|> summarize_row_groups(cfun = ...) \|> analyze("AVAL", afun = ...)` |
+| **18** | **Nested Page-By Splits (Page Per Outer × Inner Facet Combination)** | `basic_table(title = "...") \|> split_rows_by("SEX", page_by = TRUE, page_prefix = "Gender", split_fun = drop_split_levels) \|> split_rows_by("STRATA1", page_by = TRUE, page_prefix = "Stratum") \|> analyze("AGE", afun = ...)` |
 
 ---
 
@@ -474,4 +485,6 @@ Use this lookup table to map any desired visual row structure to its canonical `
    - When anchoring multiple sibling analyses/splits along the same branch, always order them from the **deepest** anchor to the **shallowest** anchor. Use `get_row_anchor_list(lyt)` to verify eligible anchors.
 7. **Duplicate Sibling Names in Row Paths**:
    - If you analyze or split on the same variable more than once at the same nesting level (e.g., `analyze("AGE") |> insert_blank_line() |> analyze("AGE")`), always supply distinct `table_names = "AGE_2"` so row paths remain unique and addressable.
+8. **`page_by` Placement Constraints**:
+   - A `page_by = TRUE` split must be the outermost row split with no top-level siblings. It cannot be nested inside a non-`page_by` split, and it cannot be the target of `at_sibling`. Only `split_rows_by()` supports `page_by`; the other `split_rows_by_*` variants do not. Remember that `page_by` only takes effect during pagination (`paginate_table()`, `export_as_txt()`, `export_as_pdf()`); without pagination (`print(tbl)`, `toString(tbl)`) the split renders as an ordinary row split.
 
