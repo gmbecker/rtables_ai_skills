@@ -523,7 +523,7 @@ When `library(junco)` is available, use its high-level pipeline functions for CD
 Constructs active vs. control treatment spanners and pairwise difference columns.
 - Arguments: `colspan_trt_map`, `combo_map_df`, `comp_map`, `diff_cols = TRUE`, `diffs_label = "Risk Differences"`, `.main_pre`, `.main_post`, `.rr_pre`, `.rr_post`.
 - Supports virtual combination arms (`combo_map_df`) and arbitrary comparison matrices (`comp_map`).
-- Automatically injects `ref_path` into the `extra_args` of each comparison column.
+- Automatically injects `ref_path` into the `extra_args` of each comparison column. **Because of this auto-injection, `ref_path` must never be passed in `extra_args` on downstream `analyze()` or `summarize_row_groups()` calls. Doing so causes `"formal argument ref_path matched by multiple actual arguments"` errors in comparison columns.** For custom afuns that need `ref_path` in treatment columns (e.g., to call `get_ref_info()`), capture `ref_path` from a closure scope (see Tier 3 closure-capture pattern in `[custom_afuns.md](./custom_afuns.md)`).
 
 ### 8.2 `grouped_cols_w_subgrps()`
 Splits treatment arms by a subgroup variable.
@@ -559,5 +559,8 @@ Post-processing split function factory for multi-variable layouts (`split_cols_b
    - Chaining `split_cols_by` calls creates nested crossed subtrees. Use `nested = FALSE` or precede splits with `add_overall_col("Header")` for parallel banners.
 3. **Factor Level Hygiene**:
    - `split_cols_by` preserves all factor levels (producing `N=0` columns). Use `droplevels()` or `keep_split_levels()` when unobserved levels should be omitted.
-4. **Sibling Header Visibility**:
+   - **Post-filter and post-join repair**: Filtering `adsl` (e.g., removing `"Screen Failure"`) can leave stale factor levels or convert factors to character. After any filter, re-apply `factor()` to drop unused levels: `adsl <- adsl |> filter(...) |> mutate(TRT01A = factor(TRT01A))`. After joining `adsl` columns onto `df`, synchronize factor levels: `adae <- adae |> mutate(TRT01A = factor(TRT01A, levels = levels(adsl$TRT01A)))`. Mismatched levels between `df` and `alt_counts_df` cause `"All facets matched removal criteria"` or `create_colspan_map` errors.
+4. **`ref_path` Double-Injection with `grouped_cols_w_diffs()`**:
+   - `grouped_cols_w_diffs()` auto-injects `ref_path` into comparison column `extra_args`. If `ref_path` is also passed in `extra_args` on downstream `analyze()` or `summarize_row_groups()` calls, comparison columns receive `ref_path` twice, causing `"formal argument ref_path matched by multiple actual arguments"`. When using `grouped_cols_w_diffs()`, never pass `ref_path` in `extra_args`; for custom afuns that need it in treatment columns, use the closure-capture pattern from `[custom_afuns.md](./custom_afuns.md)` Tier 3.
+5. **Sibling Header Visibility**:
    - When modifying column count visibility via `facet_colcounts_visible(tbl, path) <- TRUE`, pass the path pointing to the parent split level, not a single leaf.

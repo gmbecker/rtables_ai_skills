@@ -306,16 +306,35 @@ bridged_diff_afun <- function(x, ref_path, .spl_context, .var) {
 }
 ```
 
-### How `junco::get_ref_info(ref_path, .spl_context, var = NULL)` Works:
-- **When `var = NULL` (for `df`-taking `afun`s)**: Returns `list(ref_group = <data.frame>, in_ref_col = <logical>)`, where `ref_group` is the current row facet's `full_parent_df` subsetted to the column identified by `ref_path` (e.g., `c("colspan_trt", " ", "ARM", "B: Placebo")`).
-- **When `var = .var` (for `x`-taking `afun`s)**: Returns `list(ref_group = <vector>, in_ref_col = <logical>)`, extracting column `var` from the reference group's data frame.
-- **In non-matching sibling column branches** (e.g., inside a separate `"Risk Difference"` column tree or an `"Overall"` column where `in_ref_col` is `FALSE`): Safely resolves or returns `NULL` as appropriate without throwing missing-argument errors.
+### How `junco::get_ref_info(ref_path, .spl_context, .var = NULL)` Works:
+- **When `.var = NULL` (for `df`-taking `afun`s)**: Returns `list(ref_group = <data.frame>, in_ref_col = <logical>)`, where `ref_group` is the current row facet's `full_parent_df` subsetted to the column identified by `ref_path` (e.g., `c("colspan_trt", " ", "ARM", "B: Placebo")`).
+- **When `.var = .var` (for `x`-taking `afun`s)**: Returns `list(ref_group = <vector>, in_ref_col = <logical>)`, extracting column `.var` from the reference group's data frame.
+- **In non-matching sibling column branches** (e.g., inside a separate `"Risk Difference"` column tree or an `"Overall"` column): `in_ref_col` is `NULL` (not `FALSE`). Use `isTRUE(ref$in_ref_col)` to test for the reference column and `is.null(ref$in_ref_col)` to detect difference columns.
+
+### How `ref_path` Reaches the Bridged `afun`: Auto-Injection vs. Closure Capture
+- **When using `grouped_cols_w_diffs()` or any column structure function that auto-injects `ref_path`**: `ref_path` must NOT be passed in `extra_args` (doing so causes double-injection errors in comparison columns). Instead, capture `ref_path` from a closure scope:
+  ```r
+  make_bridged_afun <- function(ref_path) {
+    function(df, .var, .spl_context, ...) {
+      ref <- junco::get_ref_info(ref_path, .spl_context, .var = NULL)
+      standard_diff_afun(df, .ref_group = ref$ref_group, .in_ref_col = isTRUE(ref$in_ref_col))
+    }
+  }
+  ```
+- **When building column layouts manually with `split_cols_by()`**: Pass `ref_path` explicitly in `extra_args = list(ref_path = ref_path)` on each `analyze()`/`summarize_row_groups()` call, and accept `ref_path` as a formal argument of the bridged afun.
 
 ---
 
 ## 5. Tier 4: Core Mechanics for Writing Bespoke `afun`s and `cfun`s
 
 When Tiers 0–3 cannot satisfy a requirement, write a custom function following `rtables`' formal contracts. A fundamental contract is that **an `afun`/`cfun` must never read precomputed cell values or analysis results from the enclosing or global environment**. All cell values must be computed within the function body from the data and special arguments `rtables` passes to it, or retrieved from an environment cache populated by a prior `afun` call during the same `build_table()` execution (see Building Block 3, Section 7). Note that function factories which capture *configuration* (thresholds, method names, format strings, variable names) from their enclosing scope are fine — the prohibition is specifically against using closures or globals to inject precomputed data or results that should be derived from the faceted data subsets `rtables` provides.
+
+> [!IMPORTANT]
+> **Signature Union Rule (Universal Invariant)**
+> This rule applies to ALL custom afun/cfun patterns (Tiers 1–4), not just vertical stacking. When constructing a custom afun that wraps one or more existing afuns, the custom function must list in its `formals()` the **exact union** of all `rtables` special arguments (see Section 5.2) accepted by the wrapped existing afuns — **no more, no less**:
+> - **Missing arguments**: `rtables` only populates special arguments that appear in `names(formals(fun))`. If the wrapper omits a special argument that an inner function needs (e.g., `.df_row`), `rtables` never supplies it, and the inner function fails with `"argument .df_row is missing, with no default"`.
+> - **Extra arguments**: Including a special argument that no inner function accepts (e.g., `.alt_df` when the inner function expects `.alt_df_full`) causes `"unused argument"` errors when forwarded via `...`.
+> - **Verification**: Check via `names(formals(inner_fun))` against the special arguments reference in Section 5.2. Pay special attention to the confusingly similar argument name pairs listed in Section 5.2.
 
 ### 5.1 Unified `afun` / `cfun` Function Template
 
@@ -328,6 +347,7 @@ template_acfun <- function(df,               # Or `x` if only the single analyze
                            labelstr = NULL,  # Non-NULL when called as cfun; NULL when called as afun
                            .var,             # Optional special args populated by rtables
                            .N_col,
+                           .df_row,          # Full row-facet data across all columns; commonly needed by junco functions
                            .spl_context,
                            label = NULL,     # Optional user extra_args
                            ...) {
@@ -374,6 +394,14 @@ template_acfun <- function(df,               # Or `x` if only the single analyze
 | **Reference Info** | `.ref_full` | `data.frame` or `vector` | Full reference column data ignoring row splits. |
 | **Reference Info** | `.in_ref_col` | `logical(1)` | `TRUE` when currently executing inside the designated reference column. Pair with `non_ref_rcell(val, is_ref = .in_ref_col, format = ...)`. |
 | **Split Context** | `.spl_context` | `data.frame` | Complete ancestry of row splits and current column coordinates. See Section 6. |
+
+> [!WARNING]
+> **Confusingly Similar Special Argument Names**
+> Several special arguments have similar names but different scoping. Including the wrong one causes "unused argument" errors (if forwarded via `...`) or silently receives wrong data. Common confusions:
+> - **`.alt_df`** vs **`.alt_df_full`** vs **`.alt_df_row`**: `.alt_df` = `alt_counts_df` subsetted by both row and column; `.alt_df_full` = entire unsplit `alt_counts_df`; `.alt_df_row` = `alt_counts_df` subsetted by row splits only. Most `junco` frequency functions (e.g., `a_freq_j`) use **`.alt_df_full`**, not `.alt_df`.
+> - **`.df_row`** vs **`df`**: `.df_row` = full row-facet data across all columns; `df` = column-sliced data for the current cell. `.df_row` is commonly needed by `junco` functions for denominator calculations.
+> - **`.ref_group`** vs **`.ref_full`**: `.ref_group` = reference column data for current row facet; `.ref_full` = full reference column data ignoring row splits.
+> - **`.N_col`** vs **`.N_row`** vs **`.N_total`**: `.N_col` uses `alt_counts_df` when provided; `.N_row` always uses primary `df`; `.N_total` is unreliable (double-counts with Overall/diff columns).
 
 ---
 
@@ -525,6 +553,34 @@ Understanding `rtables` format precedence is essential when deciding whether to 
 > Format instructions passed to `analyze(format = ...)` or `analyze(formats_var = ...)` **only apply to cells/rows whose format returned by `afun` is `NULL` or `"default"`**!
 > - If you want your custom `afun` to have sensible default formats *while still allowing users to override them*, accept `.formats = c(stat1 = "xx.x", ...)` as a formal argument of your `afun` (so users can override via `extra_args = list(.formats = ...)` or `make_afun()`), or leave `.formats = NULL` when delegating to `analyze(formats_var = ...)`.
 
+### Building Block 6: Label-Only Header Row (Blank Cells with Visible Stub Label)
+
+To emit a row with a visible stub label but blank cells across all columns from within an `afun`, use `rcell(NULL, format = "xx")`. This can be stacked with other rows via `c()` to create section headers within an afun's output:
+
+```r
+section_afun <- function(df, .var, .N_col, ...) {
+  header <- in_rows("Section Header" = rcell(NULL, format = "xx"))
+  row1 <- in_rows("Detail Row 1" = rcell(nrow(df), format = "xx"))
+  indent_mod(row1) <- 1L
+  c(header, row1)
+}
+```
+
+This is distinct from `show_labels = "visible"` on `analyze()` (which adds a variable-label header row above the analysis rows) and from `summarize_row_groups()` (which adds a content row at a facet boundary). The afun-emitted label-only row is needed when a section header must appear *within* a block of rows generated by a single `analyze()` call.
+
+### Building Block 7: Pre-Computed Derived Variables (Data Scope Invariant)
+
+`rtables` populates **all data.frame special arguments** — `.df_row`, `.alt_df`, `.alt_df_row`, `.alt_df_full`, `.ref_group`, `.ref_full` — and the `full_parent_df` entries in `.spl_context` from the datasets passed to `build_table()` (`df` and `alt_counts_df`). **None of these reflect transformations applied inside an afun to the `df` column-slice.** The `df` argument to an afun is a column-slice of the row-faceted data; every other data.frame special argument is derived independently from the original datasets at the appropriate scope (row-facet, column-facet, or unsplit). Transformations applied to `df` inside the afun are invisible to all of them.
+
+This means any variable that an inner function looks up via `.df_row` (as `a_freq_j` does for denominator calculation), `.alt_df_full` (as `a_freq_j` does for `denom = "n_altdf"`), `.spl_context$full_parent_df` (as Building Block 2 does for consistent sort order), or any other data.frame special argument must already exist in the appropriate dataset before `build_table()` is called. This applies to:
+- Flag/indicator variables (e.g., `SAEFL`, `RELFL`) derived via conditional logic
+- Recoded or collapsed factor variables
+- Computed numeric variables (e.g., change-from-baseline, BMI)
+- Re-leveled or re-ordered factors
+- Any column produced by `mutate()`, `case_when()`, `if_else()`, or similar transformations
+
+**Always pre-compute derived variables in data prep** (on both `df` and `alt_counts_df` when the variable is needed in both), not inside the afun.
+
 ---
 
 ## 8. Verification Checklist for Custom `afun` / `cfun` Code
@@ -532,7 +588,8 @@ Understanding `rtables` format precedence is essential when deciding whether to 
 Before using a custom `afun` or `cfun` in `build_table()`, verify:
 
 1. **Reuse Check**: Could this function be replaced by `make_afun()`, `c(rvs1, rvs2)`, `junco::get_ref_info()`, or an existing `junco` function from `[select_afuns.md](./select_afuns.md)`?
-2. **Zero-Row / All-`NA` Safety**: What happens when `nrow(df) == 0` or `all(is.na(x))` in a sparse subgroup cell?
+2. **Signature Union Rule Check**: Does the wrapper's `formals()` include every special argument that any inner function expects? Check via `names(formals(inner_fun))` against the special arguments reference in Section 5.2. Does the wrapper include any special argument that no inner function accepts? If so, remove it — forwarding it via `...` will cause "unused argument" errors. Pay special attention to confusingly similar names (`.alt_df` vs `.alt_df_full`, `.df_row` vs `df`).
+3. **Zero-Row / All-`NA` Safety**: What happens when `nrow(df) == 0` or `all(is.na(x))` in a sparse subgroup cell?
    - Does `in_rows()` still return the **exact same number of rows and row names** as a non-empty cell? (Never return a 0-row `in_rows()` with non-empty `.labels` or `.formats`, and never return fewer rows in an empty column than in populated columns).
 3. **Row-Count & Row-Name Consistency Across Columns**:
    - Does every column branch in a column-conditional `afun` emit the exact same number of rows and identical `value_names()`?
@@ -541,6 +598,8 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
    - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with `alt_counts_df = adsl`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
 5. **Dual `afun`/`cfun` Compatibility**:
    - If the function is used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal parameter and assign `labelstr` to the returned row label?
-6. **No Precomputed Cell Values Via External State**:
+7. **No Precomputed Cell Values Via External State**:
    - Does the function compute all cell values from its inputs (`df`/`x`, `.spl_context`, `.N_col`, etc.) rather than reading precomputed analysis results from the enclosing or global environment? Function factories capturing configuration parameters and environment caching per Building Block 3 are permitted; smuggling in precomputed data or results is not.
+8. **Pre-Computed Derived Variables Check**:
+   - Does the afun reference any variable (via `.var`, subsetting, or inner function calls) that doesn't exist in the dataset(s) passed to `build_table()`? If so, move the derivation to data prep. Variables created via `mutate()` inside the afun exist only in the `df` column-slice, not in `.df_row`, `.alt_df_full`, `.spl_context$full_parent_df`, or any other data.frame special argument (see Building Block 7). If the variable is needed in both `df` and `alt_counts_df` (e.g., for denominator calculations), it must be pre-computed in both datasets.
 

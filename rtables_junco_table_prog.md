@@ -1,6 +1,6 @@
 ---
 name: rtables-junco-table-programming
-description: End-to-end orchestration skill for programming clinical and statistical tables in R using `rtables`, `junco`, and `tern`. Activate this skill whenever translating a complete table shell or specification into working R code. Decomposes any table programming task into orthogonal sub-tasks—(1) Column Structure (`col_struct_layout.md`), (2) Row Faceting Structure (`row_struct_layout.md`), (3) Group Summary & Analysis Function Selection (`select_afuns.md` / `selecting_afuns.md`), with escalation to (4) Custom Analysis Function Construction (`custom_afuns.md`) when no existing function fits—and integrates their outputs into a complete, verified `build_table()` implementation.
+description: End-to-end orchestration skill for programming clinical and statistical tables in R using `rtables`, `junco`, and `tern`. Activate this skill whenever translating a complete table shell or specification into working R code. Decomposes any table programming task into orthogonal sub-tasks—(1) Column Structure (`col_struct_layout.md`), (2) Row Faceting Structure (`row_struct_layout.md`), (3) Group Summary & Analysis Function Selection (`select_afuns.md` / `selecting_afuns.md`), with escalation to (4) Custom Analysis Function Construction (`custom_afuns.md`) when no existing function fits—and integrates their outputs into a complete, verified `build_table()` implementation, with (5) Post-Build Introspection, Sorting & Pruning (`introspection_sort_prune.md`) for all operations on the built table object.
 ---
 
 # End-to-End Table Programming in `rtables` & `junco`
@@ -9,12 +9,12 @@ This master skill orchestrates the complete translation of a desired table (typi
 
 > [!IMPORTANT]
 > **Modular Architecture — Defer to Specialist Sub-Skills**
-> Programming a table in `rtables` is governed by **four distinct layout responsibilities** organized across **four specialist sub-skills**. Rather than improvising all aspects at once, always decompose the table and consult the corresponding specialist skill for each part:
+> Programming a table in `rtables` is governed by **four distinct layout responsibilities plus post-build introspection**, organized across **five specialist sub-skills**. Rather than improvising all aspects at once, always decompose the table and consult the corresponding specialist skill for each part:
 > 1. **Column Faceting Structure** $\longrightarrow$ Defer to **[col_struct_layout.md](./col_struct_layout.md)**
 > 2. **Row Faceting Structure** $\longrightarrow$ Defer to **[row_struct_layout.md](./row_struct_layout.md)**
 > 3. **Marginal Group Summary (`cfun`) & Leaf Analysis (`afun`) Selection** $\longrightarrow$ Defer to **[select_afuns.md](./select_afuns.md)** *(also referred to as `selecting_afuns.md`)*
 > 4. **Custom `afun` / `cfun` Extension & Construction (Escalation Only)** $\longrightarrow$ Defer to **[custom_afuns.md](./custom_afuns.md)** **only** when the selection process in [select_afuns.md](./select_afuns.md) confirms that no existing `junco` or `tern` function can satisfy the requirement via `extra_args` alone.
-> 5. **Post-Build Sorting & Pruning** $\longrightarrow$ Defer to **[introspection_sort_prune.md](./introspection_sort_prune.md)** when the table specification calls for removing empty/low-count rows or reordering rows by computed cell values (e.g., "sort by decreasing incidence").
+> 5. **Post-Build Introspection, Sorting & Pruning** $\longrightarrow$ Defer to **[introspection_sort_prune.md](./introspection_sort_prune.md)** for all post-`build_table()` operations: navigating the table tree (row/column pathing, wildcards), extracting cell values, removing empty/low-count rows, or reordering rows by computed cell values (e.g., "sort by decreasing incidence").
 >
 > Use **this orchestrator skill** to decompose the shell, coordinate the sub-tasks in order, enforce cross-dimension integration contracts (data preprocessing, `alt_counts_df`, `ref_path`, `denom_by`, `multivars`, and top-left labels), and assemble the final `build_table()` pipeline.
 
@@ -58,7 +58,7 @@ flowchart TD
     S1 --> S2 --> S3 --> S4
     S4 -- "Existing afun/cfun found" --> S5
     S4 -- "No suitable existing afun/cfun" --> S4_ESC --> S5
-    S5 --> S6["Stage 6: Post-Build Sorting & Pruning<br/>(Defer to introspection_sort_prune.md)<br/>prune_table() then sort_at_path()"]
+    S5 --> S6["Stage 6: Post-Build Introspection, Sorting & Pruning<br/>(Defer to introspection_sort_prune.md)<br/>Pathing, value extraction, prune_table(), sort_at_path()"]
 ```
 
 ---
@@ -184,11 +184,16 @@ Before executing `build_table()`, verify all **Six Cross-Dimension Integration C
 
 ---
 
-### Stage 6: Post-Build Sorting & Pruning $\longrightarrow$ Defer to [`introspection_sort_prune.md`](./introspection_sort_prune.md)
+### Stage 6: Post-Build Introspection, Sorting & Pruning $\longrightarrow$ Defer to [`introspection_sort_prune.md`](./introspection_sort_prune.md)
 
-After `build_table()` returns, apply post-processing when the table specification requires:
-- **Removing empty or low-count rows/subtrees** (e.g., "omit SOCs with zero subjects").
-- **Reordering rows by computed cell values** (e.g., "sort SOC and PT by decreasing incidence").
+After `build_table()` returns, **all operations on the built `TableTree` object** — navigating its structure, extracting values, removing rows, and reordering rows — are covered by **[introspection_sort_prune.md](./introspection_sort_prune.md)**. Defer to that skill for:
+
+- **Pathing**: Row and column path construction, layout-instruction-to-path mapping, `"*"` wildcards, `"@content"` navigation, discovery tools (`table_structure`, `row_paths_summary`, `col_paths_summary`).
+- **Value extraction**: `cell_values`, `row_values`, `value_at`, `tt_at_path` — including wildcard support differences between row and column paths.
+- **Pruning**: Removing empty or low-count rows/subtrees (e.g., "omit SOCs with zero subjects"). Built-in and custom pruning functions (`prune_empty_level`, `low_obs_pruner`, `count_pruner`, `bspt_pruner`, custom `prune_func`).
+- **Sorting**: Reordering rows by computed cell values (e.g., "sort SOC and PT by decreasing incidence"). Built-in and custom score functions (`jj_complex_scorefun`, `cont_n_allcols`, `cont_n_onecol`, column-path-based scorers, category pinning).
+- **Recipes**: Common post-processing patterns (AE incidence sort, reference-column sort, multi-level hierarchical sort, spanning-header-aware sort).
+- **Debugging**: Path resolution errors, score function input inspection, sort result verification.
 
 **Always prune before sorting** — pruning removes empty subtrees that would otherwise cause score function errors or produce misleading sort orders.
 
@@ -198,12 +203,6 @@ tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
   sort_at_path("AEBODSYS", cont_n_allcols, decreasing = TRUE) |>
   sort_at_path(c("AEBODSYS", "*", "AEDECOD"), pt_scorefun, decreasing = TRUE)
 ```
-
-Consult **[introspection_sort_prune.md](./introspection_sort_prune.md)** for:
-- Built-in and custom pruning functions (`prune_empty_level`, `low_obs_pruner`, custom `prune_func`).
-- Built-in and custom score functions (`cont_n_allcols`, `cont_n_onecol`, column-path-based scorers, pinning categories last).
-- Path construction rules, wildcard usage, and debugging techniques.
-- Recipes for common patterns (AE incidence sort, reference-column sort, multi-level hierarchical sort, spanning-header-aware sort).
 
 ---
 
@@ -215,6 +214,12 @@ When combining column layouts, row layouts, and analysis functions, the followin
 - Every variable referenced in **any** `split_cols_by*()` call (including helper spanning variables like `colspan_trt`, `rrisk_header`, `rrisk_label`) **must exist on both `df` and `alt_counts_df`** with identical factor levels in the same order.
 - Every outer row-split variable referenced in **`denom_by`** (e.g., `denom_by = "SEX"`) **must also exist on both `df` and `alt_counts_df`** with identical factor levels.
 - **Standard Idiom**: Create spanning/header variables and factor levels on `adsl` first (e.g., via `create_colspan_var()`), then merge `adsl` columns into the analysis dataset `df` (`adae <- dplyr::left_join(adae, adsl)` or `dplyr::right_join(adae, adsl, by = "USUBJID")`).
+- **Factor Level Hygiene After Filtering and Joining**: Filtering `adsl` (e.g., removing `"Screen Failure"`) can leave stale factor levels or convert factors to character. After any filter, re-apply `factor()` to drop unused levels. After joining, synchronize factor levels between `df` and `alt_counts_df`:
+  ```r
+  adsl <- adsl |> filter(...) |> mutate(TRT01A = factor(TRT01A))
+  adae <- adae |> mutate(TRT01A = factor(TRT01A, levels = levels(adsl$TRT01A)))
+  ```
+  `create_colspan_var()` / `create_colspan_map()` and `grouped_cols_w_diffs()` require factor input with matching levels; character or mismatched-level variables cause `"All facets matched removal criteria"` or `create_colspan_map` errors.
 
 ### Contract 2: Reference Path (`ref_path`) Alignment Between Column Layout and `afun`/`cfun`
 - Any comparative `junco` function (`a_freq_j(..., riskdiff = TRUE)`, `a_eair100_j(..., riskdiff = TRUE)`, `a_diff_means()`, `a_summarize_ex_j(..., comp_btw_group = TRUE)`, `a_summarize_aval_chg_diff_j()`, `a_summarize_ancova_j()`, `a_lsmeans()`, `a_proportion_diff_j()`, `a_odds_ratio_j()`, `a_relative_risk()`, `a_cmhrms_j()`, `a_patyrs_j()`) requires `ref_path` to point to the exact column tree path of the control/reference group:
@@ -226,8 +231,8 @@ When combining column layouts, row layouts, and analysis functions, the followin
     ```r
     ref_path <- c("TRT01A", "Placebo")
     ```
-- Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`, but passing `ref_path = ref_path` in `extra_args` is always safe and required when building manual `split_cols_by()` comparison branches.
-- **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
+- Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`. **When using `grouped_cols_w_diffs()` or any column structure function that auto-injects `ref_path`, `ref_path` must NOT appear in `extra_args`** — doing so causes `"formal argument ref_path matched by multiple actual arguments"` in comparison columns. When building manual `split_cols_by()` comparison branches (without `grouped_cols_w_diffs()`), pass `ref_path = ref_path` explicitly in `extra_args`.
+- **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout: when using `grouped_cols_w_diffs()`, capture `ref_path` from a closure scope (see Tier 3 closure-capture pattern in `[custom_afuns.md](./custom_afuns.md)`); when building column layouts manually with `split_cols_by()`, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
 
 ### Contract 3: Subgroup Row Splits + `denom_by` Conditioning
 - Whenever row faceting splits the table by a demographic/baseline subgroup variable (e.g., `split_rows_by("SEX")` or `split_rows_by("AGEGR1")`) and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
@@ -564,12 +569,13 @@ Before delivering any `rtables` + `junco` table implementation, verify all 9 ite
    - Is `alt_counts_df = adsl` passed to `build_table()` for all event/repeated-measures tables?
    - Do all column-split variables and `denom_by` variables exist with identical factor levels on both `df` and `alt_counts_df`?
 6. **Reference Path (`ref_path`) Consistency**:
-   - Does `ref_path` in `extra_args` match the exact alternating `c(split_var, split_val, ...)` path to the control column in the column layout?
+   - Is the column structure built with `grouped_cols_w_diffs()` or another auto-injecting function? If so, `ref_path` must NOT appear in `extra_args` on any downstream `analyze()` or `summarize_row_groups()` call. For custom afuns that need `ref_path` in treatment columns, use the closure-capture pattern (see `[custom_afuns.md](./custom_afuns.md)` Tier 3).
+   - If using manual `split_cols_by()` comparison branches, does `ref_path` in `extra_args` match the exact alternating `c(split_var, split_val, ...)` path to the control column in the column layout?
 7. **Precision & Formatting (`formats_d`)**:
    - Are parameter-specific decimal precisions (`formats_var = "fmt_d"`) or significant figures (`format_sigfig_j()`) wired with `.formats = "default"` where required?
 8. **Top-Left & Section Dividers**:
    - Are `label_pos = "topleft"`, `append_topleft()`, `section_div`, and `top_level_section_div` aligned with the shell's visual layout?
-9. **Post-Build Sorting & Pruning ([`introspection_sort_prune.md`](./introspection_sort_prune.md))**:
+9. **Post-Build Introspection, Sorting & Pruning ([`introspection_sort_prune.md`](./introspection_sort_prune.md))**:
    - If the specification calls for sorting by incidence or removing empty rows, is `prune_table()` called before `sort_at_path()`?
    - Do the sort paths match the actual table structure (verify with `table_structure()` or `row_paths_summary()`)?
    - Does the score function match the type of children at the sort path (content-row-based for subtables with `summarize_row_groups()`, `row_values`-based for `DataRow`s from `analyze()`)?

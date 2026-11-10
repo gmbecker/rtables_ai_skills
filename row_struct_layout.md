@@ -481,7 +481,7 @@ Use this lookup table to map any desired visual row structure to its canonical `
 
 | # | Row Structure Archetype | Canonical Layout Pipeline |
 | :--- | :--- | :--- |
-| **1** | **No-Split Stacked Analyses** (Root variables analyzed sequentially) | `basic_table() \|> analyze("VAR1", afun = ...) \|> analyze("VAR2", afun = ...)` |
+| **1** | **No-Split Stacked Analyses** (Root variables analyzed sequentially; each `analyze()` can emit multiple rows with internal structure via a custom afun — headers, indented sub-rows, rows from different variables — making this the standard approach for tables with pre-specified row sections that don't correspond to data-driven facets. Cross-reference `[custom_afuns.md](./custom_afuns.md)` Pattern 2B (vertical stacking) and Pattern 2C (`indent_mod()` modification) for constructing multi-row sections.) | `basic_table() \|> analyze("VAR1", afun = ...) \|> analyze("VAR2", afun = ...)` |
 | **2** | **Single Categorical Row Split (Label Rows Only)** | `basic_table() \|> split_rows_by("SEX", split_fun = drop_split_levels) \|> analyze("AGE", afun = ...)` |
 | **3** | **Single Row Split with Group Summary Header Rows** | `basic_table() \|> split_rows_by("AEBODSYS", split_fun = trim_levels_in_group("AEDECOD")) \|> summarize_row_groups("USUBJID", cfun = ...) \|> analyze("AEDECOD", afun = ...)` |
 | **4** | **Root Overall Summary Row + Un-Nested Group Split with Group Summaries** (Standard AE Table) | `basic_table() \|> analyze("USUBJID", afun = ...) \|> split_rows_by("AEBODSYS", nested = FALSE, split_fun = trim_levels_in_group("AEDECOD"), label_pos = "topleft") \|> summarize_row_groups("AEBODSYS", cfun = ...) \|> analyze("AEDECOD", afun = ...)` |
