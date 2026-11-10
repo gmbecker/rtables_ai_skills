@@ -107,6 +107,7 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
 
 1. **Map Each Section's Row Splits and Terminating `analyze()` Calls**:
    - **Root / Unfaceted Section**: Use `analyze("VAR", var_labels = "...", show_labels = "visible")` directly without an unnecessary `split_rows_by()`.
+   - **Stacked Pre-Specified Sections (Archetype 1)**: When a table has multiple pre-specified row sections (each a single `analyze()` call whose custom `afun` emits multiple rows), use `var_labels = "Section Header", show_labels = "visible"` on each `analyze()` call to place a leading label-only header row above the section's analysis rows. **Never emit a leading `rcell(NULL)` from the `afun` for this purpose** — see [custom_afuns.md](./custom_afuns.md) Building Block 6. If an existing afun already produces the correct rows and only the section header label is missing, use it directly with `var_labels`/`show_labels` — no custom wrapper is needed.
    - **Nested Row Hierarchy**: Chain `split_rows_by*()` from outermost to innermost, and terminate every branch with at least one `analyze()` call.
    - **Multi-Section / Stacked Row Layouts**: Remember that any `split_rows_by*()` immediately following an `analyze()` automatically defaults to `nested = FALSE` (returning to the root). To make a multi-section layout reusable inside an outer subgroup split (e.g., `split_rows_by("STRATA1")`), anchor subsequent sections to the first section via **`at_sibling = "<first_var>"`**.
    - **Intermediate Nesting**: Use **`at_sibling = "<anchor_var>"`** (ordered from deepest anchor to shallowest anchor) when placing analyses or splits at intermediate depths of a multi-level hierarchy.
@@ -149,10 +150,10 @@ First, consult **[select_afuns.md](./select_afuns.md)** (also referred to as `se
    - Dynamic decimal precision (`fmt_spec_var_d`, `fmt_spec_df_d`, `format_sigfig_j`, `formats_var = "fmt_d"`, `.formats = "default"`).
 3. **Escalation When No Suitable Existing `afun` / `cfun` Is Found $\longrightarrow$ Defer to [`custom_afuns.md`](./custom_afuns.md)**:
    - If (and **only** if) the evaluation in [select_afuns.md](./select_afuns.md) determines that no existing `junco` or `tern` function can produce the required rows/cells via `extra_args`, escalate to **[custom_afuns.md](./custom_afuns.md)** and follow its strict reuse-first hierarchy:
-     - **Tier 1 (Wrap with `make_afun`)**: Wrap an existing `s_*` or `a_*` function with `rtables::make_afun()` to lock in `.stats`, `.formats`, `.labels`, `.indent_mods`, `.ungroup_stats`, or curried default arguments.
-     - **Tier 2 (Combine / Mutate `RowsVerticalSection`s)**: Write a thin wrapper that calls existing `afun`s and combines or modifies their returned `RowsVerticalSection` objects—either dispatching between two existing `afun`s across columns via `.spl_context`, stacking multiple existing `afun`s vertically via `c(rvs1, rvs2)`, or adjusting indentation/formats via `indent_mod(rvs) <- ...`.
-     - **Tier 3 (Bridge Reference Group Paths)**: If an existing function expects `.ref_group` and `.in_ref_col` but the layout uses nested spanning headers (`ref_path`) or an Overall column, write a 3-line adapter calling `junco::get_ref_info(ref_path, .spl_context, .var)` and delegating to the existing function.
-     - **Tier 4 (Bespoke `in_rows()` Function)**: Author a fully custom `afun`/`cfun` from scratch **only** when Tiers 1–3 cannot express the calculation, ensuring every column returns the exact same number of rows (even when `nrow(df) == 0`) and uses `.N_col` / `.alt_df_full` rather than `.N_row` or `.N_total` for subject denominators.
+     - **Tier 2 (Wrap with `make_afun`)**: Wrap an existing `s_*` or `a_*` function with `rtables::make_afun()` to lock in `.stats`, `.formats`, `.labels`, `.indent_mods`, `.ungroup_stats`, or curried default arguments.
+     - **Tier 3 (Combine / Mutate `RowsVerticalSection`s)**: Write a thin wrapper that calls existing `afun`s and combines or modifies their returned `RowsVerticalSection` objects—either dispatching between two existing `afun`s across columns via `.spl_context`, stacking multiple existing `afun`s vertically via `c(rvs1, rvs2)`, or adjusting indentation/formats via `indent_mod(rvs) <- ...`.
+     - **Tier 4 (Bridge Reference Group Paths)**: If an existing function expects `.ref_group` and `.in_ref_col` but the layout uses nested spanning headers (`ref_path`) or an Overall column, write a 3-line adapter calling `junco::get_ref_info(ref_path, .spl_context, .var)` and delegating to the existing function.
+     - **Tier 5 (Bespoke `in_rows()` Function)**: Author a fully custom `afun`/`cfun` from scratch **only** when Tiers 2–4 cannot express the calculation, ensuring every column returns the exact same number of rows (even when `nrow(df) == 0`) and uses `.N_col` / `.alt_df_full` rather than `.N_row` or `.N_total` for subject denominators.
 
 ---
 
@@ -232,7 +233,7 @@ When combining column layouts, row layouts, and analysis functions, the followin
     ref_path <- c("TRT01A", "Placebo")
     ```
 - Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`. **When using `grouped_cols_w_diffs()` or any column structure function that auto-injects `ref_path`, `ref_path` must NOT appear in `extra_args`** — doing so causes `"formal argument ref_path matched by multiple actual arguments"` in comparison columns. When building manual `split_cols_by()` comparison branches (without `grouped_cols_w_diffs()`), pass `ref_path = ref_path` explicitly in `extra_args`.
-- **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout: when using `grouped_cols_w_diffs()`, capture `ref_path` from a closure scope (see Tier 3 closure-capture pattern in `[custom_afuns.md](./custom_afuns.md)`); when building column layouts manually with `split_cols_by()`, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
+- **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout: when using `grouped_cols_w_diffs()`, capture `ref_path` from a closure scope (see Tier 4 closure-capture pattern in `[custom_afuns.md](./custom_afuns.md)`); when building column layouts manually with `split_cols_by()`, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
 
 ### Contract 3: Subgroup Row Splits + `denom_by` Conditioning
 - Whenever row faceting splits the table by a demographic/baseline subgroup variable (e.g., `split_rows_by("SEX")` or `split_rows_by("AGEGR1")`) and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
@@ -557,6 +558,7 @@ Before delivering any `rtables` + `junco` table implementation, verify all 9 ite
    - Does every `split_rows_by*()` branch terminate in at least one `analyze()` call?
    - Are `summarize_row_groups()` calls placed immediately after the `split_rows_by*()` they summarize?
    - Are `label_pos`, `child_labels`, and `show_labels` set so there are no duplicate or missing group/variable headers?
+   - Are section headers in stacked `analyze()` layouts (Archetype 1) implemented via `var_labels = "...", show_labels = "visible"` on the `analyze()` call, **not** via `rcell(NULL)` inside the `afun`?
 3. **Split Function Semantics Verified ([`row_struct_layout.md`](./row_struct_layout.md) & [`col_struct_layout.md`](./col_struct_layout.md))**:
    - Are hierarchically nested variables (`AEBODSYS -> AEDECOD`) trimmed via `trim_levels_in_group()` or `trim_levels_to_map()`?
    - Is `drop_split_levels` avoided on inner splits when a uniform inner factor scale (`SEX`, `AETOXGR`) is required across all outer groups?
@@ -569,7 +571,7 @@ Before delivering any `rtables` + `junco` table implementation, verify all 9 ite
    - Is `alt_counts_df = adsl` passed to `build_table()` for all event/repeated-measures tables?
    - Do all column-split variables and `denom_by` variables exist with identical factor levels on both `df` and `alt_counts_df`?
 6. **Reference Path (`ref_path`) Consistency**:
-   - Is the column structure built with `grouped_cols_w_diffs()` or another auto-injecting function? If so, `ref_path` must NOT appear in `extra_args` on any downstream `analyze()` or `summarize_row_groups()` call. For custom afuns that need `ref_path` in treatment columns, use the closure-capture pattern (see `[custom_afuns.md](./custom_afuns.md)` Tier 3).
+   - Is the column structure built with `grouped_cols_w_diffs()` or another auto-injecting function? If so, `ref_path` must NOT appear in `extra_args` on any downstream `analyze()` or `summarize_row_groups()` call. For custom afuns that need `ref_path` in treatment columns, use the closure-capture pattern (see `[custom_afuns.md](./custom_afuns.md)` Tier 4).
    - If using manual `split_cols_by()` comparison branches, does `ref_path` in `extra_args` match the exact alternating `c(split_var, split_val, ...)` path to the control column in the column layout?
 7. **Precision & Formatting (`formats_d`)**:
    - Are parameter-specific decimal precisions (`formats_var = "fmt_d"`) or significant figures (`format_sigfig_j()`) wired with `.formats = "default"` where required?

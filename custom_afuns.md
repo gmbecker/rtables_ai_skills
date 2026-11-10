@@ -12,25 +12,33 @@ description: Construct, extend, wrap, and combine custom analysis functions (`af
 
 ## 1. The Customization Escalation Ladder (Decision Tree)
 
-Before writing a custom function body, evaluate your requirement against these five tiers in order:
+Before writing a custom function body, evaluate your requirement against these six tiers in order:
 
 ```
 Need specific cell values, row labels, formats, or conditional behavior in analyze() / summarize_row_groups()?
  │
- ├─► Tier 0: Can an existing `junco` or `tern` function do this via `extra_args`?
+ ├─► Tier 0: Does an existing `junco` or `tern` function already produce the correct
+ │           CELLS, with the only gap being a missing section-header label row above
+ │           the analysis block?
+ │     └──► YES: The function satisfies the requirement as-is. Use it directly with
+ │               `var_labels = "...", show_labels = "visible"` on the `analyze()` call.
+ │               Do NOT write a custom function or wrapper. Defer to `[select_afuns.md](./select_afuns.md)`.
+ │
+ ├─► Tier 1: Can an existing `junco` or `tern` function do this via `extra_args`?
  │     • Check `a_freq_j`, `a_summary_j`, `a_two_tier`, `a_summarize_aval_chg_diff_j`,
  │       `a_maxlev`, `a_eair100_j`, `c_summary_subset_label`, `column_stats`, etc.
  │     • Check `.stats`, `.formats`, `.labels`, `.indent_mods`, `denom`, `denom_by`,
  │       `ref_path`, `riskdiff`, `comp_btw_group`, `exclude_visits`, `drill_down_levs`.
  │     └──► YES: Do NOT write a custom function. Defer to `[select_afuns.md](./select_afuns.md)`.
+ │               (If the only remaining gap is a missing section-header label, see Tier 0.)
  │
- ├─► Tier 1: Does an existing `s_*` or `a_*` function compute the right values,
+ ├─► Tier 2: Does an existing `s_*` or `a_*` function compute the right values,
  │           but you need fixed subsetting of `.stats`, custom `.formats`/`.labels`/`.indent_mods`,
  │           ungrouped list stats (`.ungroup_stats`), or curried default arguments?
  │     └──► YES: Wrap the existing function with `rtables::make_afun()` (or `list_wrap_x()` / `list_wrap_df()`).
  │               See Section 2.
  │
- ├─► Tier 2: Can the desired output be built by calling one or more EXISTING `afun`/`cfun`s
+ ├─► Tier 3: Can the desired output be built by calling one or more EXISTING `afun`/`cfun`s
  │           and combining, selecting between, or tweaking their returned `RowsVerticalSection` objects?
  │     ├─► Different existing `afun`s in different columns (e.g., counts in Arm cols, custom stats in Diff cols, or counts in Arm cols, blank cells in Diff cols)?
  │     │     └──► Use Column-Conditional Dispatch Wrapper (Section 3.2).
@@ -42,21 +50,24 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
  │         (and `junco::a_two_tier` doesn't fit)?
  │           └──► Use Conditional Stacking with `lapply()` + `c()` + `indent_mod<-` (Section 3.5).
  │
- ├─► Tier 3: Does an existing `afun` expect `.ref_group` and `.in_ref_col`, but your table uses
+ ├─► Tier 4: Does an existing `afun` expect `.ref_group` and `.in_ref_col`, but your table uses
  │           a nested/spanned column tree (`ref_path`) or an Overall column that breaks standard `ref_group`?
  │     └──► YES: Write a 3-line adapter using `junco::get_ref_info(ref_path, .spl_context, .var)`
  │               and delegate to the existing `afun` (Section 4).
  │
- └─► Tier 4: None of the above apply (genuinely novel statistical calculation or bespoke multi-ancestor logic).
+ └─► Tier 5: None of the above apply (genuinely novel statistical calculation or bespoke multi-ancestor logic).
        └──► Requires non-trivial novel statistical calculations beyond e.g., counts and percents?
        │    └──► YES: write a dummy function which warns the user and emits the correct number of rows. **DO NOT implement statistical calculations on your own**
        └──► Write a clean custom `afun`/`cfun` using `in_rows()`, `rcell()`, `.spl_context`,
             and reusable behavioral building blocks (Sections 5–7).
 ```
 
+> [!IMPORTANT]
+> **Leading Section-Header Invariant (ALL tiers 1–5)**: If the custom `afun` needs a leading label-only header row (blank cells with a visible stub label) as the first row of its output, do **not** emit it via `rcell(NULL)` inside the `afun`. Instead, use `var_labels = "Header Text", show_labels = "visible"` on the `analyze()` call — this is Tier 0, not a reason to write a custom function. `rcell(NULL)` inside an `afun` is only permitted for label-only rows **interspersed among** analysis rows (see Building Block 6, Section 7).
+
 ---
 
-## 2. Tier 1: Wrapping and Customizing Existing Functions (`make_afun`)
+## 2. Tier 2: Wrapping and Customizing Existing Functions (`make_afun`)
 
 When a statistical summary function `s_*` (returning a named `list`) or an analysis function `a_*` (returning a `RowsVerticalSection` via `in_rows()`, which inherits from `list`) already computes the required numbers, use `rtables::make_afun()` to create a customized `afun` without writing a new function body.
 
@@ -115,7 +126,7 @@ a_base_summary <- make_afun(
 
 ---
 
-## 3. Tier 2: Combining and Extending Existing `afun`s via `RowsVerticalSection`
+## 3. Tier 3: Combining and Extending Existing `afun`s via `RowsVerticalSection`
 
 Every modern `afun` and `cfun` in `rtables`, `tern`, and `junco` returns the result of `in_rows()`, which is a **`RowsVerticalSection`** object. Understanding what a `RowsVerticalSection` contains—and how to manipulate and combine it—lets you build complex composite analysis functions by orchestrating existing `afun`s.
 
@@ -281,7 +292,7 @@ custom_two_tier_afun <- function(df, .var, .spl_context, detail_var, detail_leve
 
 ---
 
-## 4. Tier 3: Bridging Existing Comparative `afun`s to Nested Column Trees (`get_ref_info`)
+## 4. Tier 4: Bridging Existing Comparative `afun`s to Nested Column Trees (`get_ref_info`)
 
 Many comparative analysis functions (including `tern` functions and functions built with `make_afun` using `.ref_group` and `.in_ref_col`) assume `rtables` automatically populates `.ref_group` and `.in_ref_col`. However, `rtables`' built-in `ref_group` argument on `split_cols_by()` only works within a single flat column split—it cannot resolve a reference arm across **nested spanning headers** (e.g., `"Active Study Agent"` vs `" "` $\rightarrow$ `"B: Placebo"`) or when an **Overall/Total column** is added via `add_overall_col()`.
 
@@ -325,13 +336,13 @@ bridged_diff_afun <- function(x, ref_path, .spl_context, .var) {
 
 ---
 
-## 5. Tier 4: Core Mechanics for Writing Bespoke `afun`s and `cfun`s
+## 5. Tier 5: Core Mechanics for Writing Bespoke `afun`s and `cfun`s
 
-When Tiers 0–3 cannot satisfy a requirement, write a custom function following `rtables`' formal contracts. A fundamental contract is that **an `afun`/`cfun` must never read precomputed cell values or analysis results from the enclosing or global environment**. All cell values must be computed within the function body from the data and special arguments `rtables` passes to it, or retrieved from an environment cache populated by a prior `afun` call during the same `build_table()` execution (see Building Block 3, Section 7). Note that function factories which capture *configuration* (thresholds, method names, format strings, variable names) from their enclosing scope are fine — the prohibition is specifically against using closures or globals to inject precomputed data or results that should be derived from the faceted data subsets `rtables` provides.
+When Tiers 0–4 cannot satisfy a requirement, write a custom function following `rtables`' formal contracts. A fundamental contract is that **an `afun`/`cfun` must never read precomputed cell values or analysis results from the enclosing or global environment**. All cell values must be computed within the function body from the data and special arguments `rtables` passes to it, or retrieved from an environment cache populated by a prior `afun` call during the same `build_table()` execution (see Building Block 3, Section 7). Note that function factories which capture *configuration* (thresholds, method names, format strings, variable names) from their enclosing scope are fine — the prohibition is specifically against using closures or globals to inject precomputed data or results that should be derived from the faceted data subsets `rtables` provides.
 
 > [!IMPORTANT]
 > **Signature Union Rule (Universal Invariant)**
-> This rule applies to ALL custom afun/cfun patterns (Tiers 1–4), not just vertical stacking. When constructing a custom afun that wraps one or more existing afuns, the custom function must list in its `formals()` the **exact union** of all `rtables` special arguments (see Section 5.2) accepted by the wrapped existing afuns — **no more, no less**:
+> This rule applies to ALL custom afun/cfun patterns (Tiers 2–5), not just vertical stacking. When constructing a custom afun that wraps one or more existing afuns, the custom function must list in its `formals()` the **exact union** of all `rtables` special arguments (see Section 5.2) accepted by the wrapped existing afuns — **no more, no less**:
 > - **Missing arguments**: `rtables` only populates special arguments that appear in `names(formals(fun))`. If the wrapper omits a special argument that an inner function needs (e.g., `.df_row`), `rtables` never supplies it, and the inner function fails with `"argument .df_row is missing, with no default"`.
 > - **Extra arguments**: Including a special argument that no inner function accepts (e.g., `.alt_df` when the inner function expects `.alt_df_full`) causes `"unused argument"` errors when forwarded via `...`.
 > - **Verification**: Check via `names(formals(inner_fun))` against the special arguments reference in Section 5.2. Pay special attention to the confusingly similar argument name pairs listed in Section 5.2.
@@ -553,20 +564,48 @@ Understanding `rtables` format precedence is essential when deciding whether to 
 > Format instructions passed to `analyze(format = ...)` or `analyze(formats_var = ...)` **only apply to cells/rows whose format returned by `afun` is `NULL` or `"default"`**!
 > - If you want your custom `afun` to have sensible default formats *while still allowing users to override them*, accept `.formats = c(stat1 = "xx.x", ...)` as a formal argument of your `afun` (so users can override via `extra_args = list(.formats = ...)` or `make_afun()`), or leave `.formats = NULL` when delegating to `analyze(formats_var = ...)`.
 
-### Building Block 6: Label-Only Header Row (Blank Cells with Visible Stub Label)
+### Building Block 6: Label-Only Header Rows — `var_labels` First, `rcell(NULL)` Only When Interspersed
 
-To emit a row with a visible stub label but blank cells across all columns from within an `afun`, use `rcell(NULL, format = "xx")`. This can be stacked with other rows via `c()` to create section headers within an afun's output:
+> [!IMPORTANT]
+> **Prohibition: Do NOT use `rcell(NULL)` inside an `afun` to create a leading section header row.** When a label-only row is the *first* row of an `analyze()` section (i.e., a section header above all analysis rows), always use `var_labels = "Section Header", show_labels = "visible"` on the `analyze()` call itself. This produces a proper `LabelRow` in the table tree — structurally correct, addressable by path, and consistent with `rtables`' label visibility model.
+>
+> The `rcell(NULL)` pattern inside an `afun` is **only** permitted when a label-only row must appear **interspersed among** analysis rows within a single `analyze()` call's output — i.e., when the label-only row is *not* the first row and cannot be expressed as the `analyze()` variable label.
+
+#### When to use `var_labels` + `show_labels` (PREFERRED — all non-interspersed cases)
+
+Whenever a section of rows needs a leading header with blank cells, set the header text on the `analyze()` call:
 
 ```r
-section_afun <- function(df, .var, .N_col, ...) {
-  header <- in_rows("Section Header" = rcell(NULL, format = "xx"))
-  row1 <- in_rows("Detail Row 1" = rcell(nrow(df), format = "xx"))
-  indent_mod(row1) <- 1L
-  c(header, row1)
+# Section header "Worst toxicity grade" above grade rows emitted by the afun
+analyze(
+  "WORST_GRADE",
+  afun = grade_afun,
+  var_labels = "Worst toxicity grade",
+  show_labels = "visible"
+)
+```
+
+The `afun` then emits only the data rows (no leading label row). This works for all stacked `analyze()` sections in Archetype 1 layouts.
+
+> [!TIP]
+> **No custom function needed just for a section header**: If an existing `junco` or `tern` afun already produces the correct cells and the only thing missing is a leading label row above the block, use the existing afun directly in `analyze()` with `var_labels` and `show_labels` — do not write a wrapper or custom function solely to add a header row.
+
+#### When `rcell(NULL)` inside an `afun` IS permitted (interspersed labels only)
+
+Use `in_rows("label" = rcell(NULL, format = "xx"))` **only** when a label-only row must appear *between* analysis rows within a single `analyze()` call — for example, when a custom afun emits rows from two different sub-sections and needs an internal divider label between them:
+
+```r
+# Two sub-sections within one afun, with an interspersed label between them
+mixed_section_afun <- function(df, .var, .N_col, ...) {
+  part1 <- some_afun(df, .var = "FLAG1", ...)
+  divider_label <- in_rows("Sub-section B" = rcell(NULL, format = "xx"))
+  part2 <- some_afun(df, .var = "FLAG2", ...)
+  indent_mod(part2) <- 1L
+  c(part1, divider_label, part2)
 }
 ```
 
-This is distinct from `show_labels = "visible"` on `analyze()` (which adds a variable-label header row above the analysis rows) and from `summarize_row_groups()` (which adds a content row at a facet boundary). The afun-emitted label-only row is needed when a section header must appear *within* a block of rows generated by a single `analyze()` call.
+This is distinct from `show_labels = "visible"` on `analyze()` (which adds a variable-label header row above all analysis rows) and from `summarize_row_groups()` (which adds a content row at a facet boundary). The afun-emitted label-only row is needed **only** when a section header must appear *within* a block of rows generated by a single `analyze()` call, not at the top.
 
 ### Building Block 7: Pre-Computed Derived Variables (Data Scope Invariant)
 
@@ -602,4 +641,6 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
    - Does the function compute all cell values from its inputs (`df`/`x`, `.spl_context`, `.N_col`, etc.) rather than reading precomputed analysis results from the enclosing or global environment? Function factories capturing configuration parameters and environment caching per Building Block 3 are permitted; smuggling in precomputed data or results is not.
 8. **Pre-Computed Derived Variables Check**:
    - Does the afun reference any variable (via `.var`, subsetting, or inner function calls) that doesn't exist in the dataset(s) passed to `build_table()`? If so, move the derivation to data prep. Variables created via `mutate()` inside the afun exist only in the `df` column-slice, not in `.df_row`, `.alt_df_full`, `.spl_context$full_parent_df`, or any other data.frame special argument (see Building Block 7). If the variable is needed in both `df` and `alt_counts_df` (e.g., for denominator calculations), it must be pre-computed in both datasets.
+9. **No Leading `rcell(NULL)` for Section Headers**:
+   - If the `afun` emits a label-only row (`rcell(NULL)`) as its **first** row to serve as a section header, this is **prohibited**. Move the header text to `var_labels = "...", show_labels = "visible"` on the `analyze()` call instead (see Building Block 6). `rcell(NULL)` inside an `afun` is only permitted for label-only rows **interspersed among** analysis rows.
 
