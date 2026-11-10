@@ -1,0 +1,555 @@
+# Post-Processing: Sorting and Pruning Rows After Table Creation
+
+This skill covers the `rtables` post-processing operations applied to a built `TableTree` object **after** `build_table()` returns. These operations reorder or remove rows or subtables based on cell values and table structure, and are the standard mechanism for implementing requirements like "sort SOC and PT by decreasing incidence" or "remove rows with zero counts."
+
+> [!IMPORTANT]
+> Sorting and pruning operate on the **built table object**, not the layout. They are always applied as a pipeline after `build_table()`:
+> ```r
+> tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+>   safe_prune_table() |>
+>   sort_at_path(path = ..., scorefun = jj_complex_scorefun(), decreasing = TRUE)
+> ```
+> **Always prune before sorting.** Pruning removes empty/zero subtrees that would otherwise cause score function errors or produce misleading sort orders.
+>
+> **Prefer `junco` functions** (`safe_prune_table`, `count_pruner`, `bspt_pruner`, `jj_complex_scorefun`) when `library(junco)` is available. Fall back to `rtables` built-ins (`prune_table`, `cont_n_allcols`, `cont_n_onecol`) or custom functions only when junco is not available.
+
+---
+
+## 1. Pruning: Structure-Aware Removal of Empty or Low-Count Subtrees
+
+### 1.1 `safe_prune_table()` (junco) -- The Preferred Pruning Entry Point
+
+```r
+safe_prune_table(tt, prune_func = prune_empty_level, stop_depth = NA,
+                 empty_msg = " - No Data To Display - ", spancols = FALSE)
+```
+
+`safe_prune_table()` wraps `prune_table()` (Section 1.2) and handles the edge case where pruning removes **all** rows: instead of returning `NULL`, it returns a table with the same column structure and a single placeholder row containing `empty_msg`. This prevents downstream errors in export pipelines.
+
+- Accepts the same `prune_func` and `stop_depth` arguments as `prune_table()`.
+- `empty_msg`: message displayed when the table is completely pruned (default `" - No Data To Display - "`).
+- `spancols`: if `TRUE`, spans the empty message across all columns.
+
+**Always use `safe_prune_table()` instead of `prune_table()` in production scripts when junco is available.**
+
+### 1.2 `prune_table()` (rtables) -- The Base Pruning Entry Point
+
+```r
+prune_table(tt, prune_func = prune_empty_level, stop_depth = NA, ...)
+```
+
+`prune_table()` recursively walks the table tree. At each node (subtable or row), it calls `prune_func`. If `prune_func` returns `TRUE`, the entire subtree is removed. After pruning children, any parent subtable left with zero remaining children is also removed. Returns `NULL` if all rows are pruned.
+
+- `stop_depth`: limits how deep pruning recurses. `stop_depth = 1` prunes only the top-level subtrees (useful when inner facets individually fall below a threshold but the outer group as a whole should be retained).
+- `...`: named arguments forwarded to `prune_func` if it accepts them.
+
+### 1.3 Built-In Pruning Functions
+
+#### 1.3.1 rtables Built-In Pruning Functions
+
+| Function | Removes When... | Typical Use |
+|---|---|---|
+| `prune_empty_level` (default) | Row: all cells are 0/NA/Inf. Subtable: single content row is all 0/NA, or no children remain after child pruning. | Standard post-build cleanup; removes factor levels with no observations. |
+| `prune_zeros_only` | Same as `prune_empty_level` but only prunes on all-zero (non-missing) values; NA rows are kept. | When NA cells are meaningful (e.g., "not evaluable") and should not be removed. |
+| `all_zero_or_na` | Any non-`LabelRow` row where all cells are 0, NA, NaN, Inf, or -Inf. | Low-level criterion; used by `prune_empty_level` internally. |
+| `all_zero` | Any non-`LabelRow` row where all cells are exactly 0 (non-missing). | Low-level criterion; used by `prune_zeros_only` internally. |
+| `content_all_zeros_nas` | Subtable has exactly one content row and that row is all 0/NA. | Targets `summarize_row_groups()` marginal rows specifically. |
+| `low_obs_pruner(min, type)` | Subtable's content row count values (first element per cell) sum or average below `min`. | Remove SOC/PT groups with fewer than `min` subjects across all arms. |
+
+#### 1.3.2 junco Pruning Functions (Preferred When Available)
+
+These junco pruning constructors operate at the **row level** (on `DataRow`s) and are aware of risk-difference column structures (automatically skipping `rrisk` columns when evaluating thresholds).
+
+| Function | Removes When... | Typical Use |
+|---|---|---|
+| `count_pruner(count, cat_include, cat_exclude, cols)` | `DataRow` where the count (first cell element) is <= `count` across the specified `cols`. Respects `cat_include`/`cat_exclude` lists by row label. | Remove individual analysis rows (e.g., PTs) with zero or low counts in specific columns. |
+| `bspt_pruner(fraction, keeprowtext, control, diff_from_control, only_more_often, cols)` | `DataRow` where the fraction (second cell element, i.e., the percentage) is below `fraction` across `cols`. Optionally also prunes based on difference from a `control` arm's percentage (`diff_from_control`). | Remove AE rows below a percentage threshold (e.g., >=5% incidence), optionally combined with a difference-from-control criterion. |
+| `remove_rows(removerowtext, reg_expr)` | `DataRow` whose label matches `removerowtext` (exact match or regex via `grepl(..., fixed = TRUE)`). | Unconditionally remove specific named rows regardless of cell values (e.g., remove "Unknown" or "Not Applicable" categories). |
+
+**Selection guidance:**
+- For count-based row pruning: `count_pruner` (junco) over writing a custom `prune_func`.
+- For percentage-based row pruning (with optional control-arm comparison): `bspt_pruner` (junco).
+- For unconditional label-based row removal: `remove_rows` (junco).
+- For subtable-level pruning by content row counts: `low_obs_pruner` (rtables).
+- For standard empty-level cleanup: `prune_empty_level` (rtables, the default).
+
+### 1.4 Pruning Patterns
+
+**Standard cleanup (remove empty factor levels):**
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  safe_prune_table()  # junco; use prune_table() if junco unavailable
+```
+
+**Remove rows below a count threshold in the Total column (junco):**
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  safe_prune_table(count_pruner(count = 0, cols = "Total"))
+```
+
+**Remove rows below 5% incidence, keeping "Safety" rows (junco):**
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  safe_prune_table(bspt_pruner(fraction = 0.05, keeprowtext = "Safety", cols = "Total"))
+```
+
+**Remove subtrees with fewer than 5 subjects on average across columns (rtables):**
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  safe_prune_table(low_obs_pruner(5, "mean"))
+```
+
+**Prune only top-level subtrees (keep inner facets even if individually sparse):**
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  safe_prune_table(low_obs_pruner(10, "sum"), stop_depth = 1)
+```
+
+### 1.5 Custom Pruning Functions
+
+Write a custom `prune_func` only when no junco or rtables built-in covers the requirement. A custom `prune_func` receives a `TableTree` (subtable) or `TableRow` and returns `TRUE` to prune. Use the same accessors available for score functions (Section 3.4).
+
+```r
+my_pruner <- function(tt) {
+  if (is(tt, "TableRow")) return(all_zero_or_na(tt))
+  ct <- content_table(tt)
+  if (NROW(ct) == 0) return(FALSE)
+  first_val <- row_values(tree_children(ct)[[1]])[[1]][1]
+  !is.null(first_val) && !is.na(first_val) && first_val < 3
+}
+tbl |> safe_prune_table(my_pruner)
+```
+
+### 1.6 `trim_rows()` -- Structure-Unaware Row Removal Anti-Pattern (PROHIBITED)
+
+Never use `trim_rows`.
+
+---
+
+## 2. Row Paths: Navigating the Table Tree
+
+Both sorting and pruning (and many other `rtables` post-processing operations) depend on understanding **paths** -- the mechanism for addressing locations within a built table's row tree. A path is a character vector where each element names a successive step down through the tree's parent-to-child hierarchy.
+
+### 2.1 How Layout Instructions Map to Path Elements
+
+Each layout instruction creates specific structural nodes in the built table, and those nodes' names become path elements:
+
+| Layout Instruction | Creates | Path Element(s) |
+|---|---|---|
+| `split_rows_by("VAR")` | A subtable named `"VAR"` containing one child subtable per factor level | `"VAR"`, then `"level_value"` |
+| `summarize_row_groups()` | A content table on the parent subtable, containing one or more `ContentRow`s | `"@content"`, then the content row name (typically same as the parent facet value) |
+| `analyze("VAR")` | An `ElementaryTable` named `"VAR"` containing `DataRow` children | `"VAR"`, then individual row names |
+
+Thus a layout like:
+```r
+split_rows_by("AEBODSYS") |>
+  summarize_row_groups() |>
+  split_rows_by("AEDECOD") |>
+    analyze("AETOXGR")
+```
+produces a tree with paths such as:
+- `c("AEBODSYS", "cl A.1")` -- the SOC subtable for "cl A.1"
+- `c("AEBODSYS", "cl A.1", "@content", "cl A.1")` -- the SOC content/summary row
+- `c("AEBODSYS", "cl A.1", "AEDECOD", "dcd A.1.1.1.1")` -- a PT subtable
+- `c("AEBODSYS", "cl A.1", "AEDECOD", "dcd A.1.1.1.1", "AETOXGR", "1")` -- a grade row
+
+### 2.2 Key Tools for Discovering Paths
+
+- `table_structure(tbl)` -- prints the tree hierarchy with node names and classes (e.g., `[TableTree]`, `[ElementaryTable]`, `[DataRow]`, `[ContentRow]`). Best for understanding the nesting shape.
+- `row_paths_summary(tbl)` -- returns a data.frame with every row's full path in a `path` list-column. Values are directly usable as path arguments.
+- `make_row_df(tbl, visible_only = FALSE)` -- programmatic access to all paths including invisible structural nodes.
+- `tt_at_path(tbl, path)` -- returns the table subtree or row located at `path`. Useful for programmatic inspection of a specific node (e.g., checking its children or class).
+- `tt_normalize_row_path` -- resolves a path pattern with wildcard(s) (`*`) entries into a list of all (zero or more) concrete paths which match the pattern. See Section 2.4.
+
+### 2.3 Path Construction Rules
+
+- Each element is a node **name** (which may differ from the display label). Use `obj_name(x)` to check a node's name vs. `obj_label(x)` for its display label.
+- A leading `"root"` element is silently ignored (it is technically correct but never required).
+- `"@content"` steps from a facet subtable into its content table (the table generated by `summarize_row_groups()`). It must always be used explicitly -- wildcards never match it.
+- Analysis table names (the variable name passed to `analyze()`) appear in the path **even if the label is hidden** when the table is printed.
+- As of `rtables` >= 0.6.13, sibling names are guaranteed unique. If a layout would create duplicate sibling names (e.g., two `split_rows_by("flag")` at different nesting levels), the second is automatically suffixed as `"flag[2]"` in the path.
+
+### 2.4 The `"*"` Wildcard
+
+`"*"` in a path matches **every child** at that position. Each matching child is processed **independently** based on the remaining path. This is the primary mechanism for applying an operation (sort, section divider, etc.) uniformly across all facets of a split.
+
+```r
+# Matches every SOC, then navigates into each one's AEDECOD subtable
+c("AEBODSYS", "*", "AEDECOD")
+
+# Multiple wildcards compose recursively:
+# For every RACE, for every STRATA within that RACE, target the AGE analysis table
+c("RACE", "*", "STRATA1", "*", "AGE")
+```
+
+`"*"` matches only named children (subtables or rows) -- it **never** matches `"@content"`. To target content rows across all facets, use `c("VAR", "*", "@content", "*")`.
+
+Paths containing wildcards can be resolved to their fully-specified expansions via:
+```r
+tt_normalize_row_path(tbl, c("AEBODSYS", "*", "AEDECOD"))
+```
+
+And tested for existence via:
+```r
+tt_row_path_exists(tbl, c("AEBODSYS", "*", "AEDECOD"))
+```
+
+### 2.5 Example: Reading `table_structure()` Output to Construct Sort Paths
+
+Given:
+```
+[TableTree] AEBODSYS
+  [TableTree] cl A.1 [cont: 1 x 5]
+    [TableTree] AEDECOD
+      [ElementaryTable] dcd A.1.1.1.1 (1 x 5)
+      [ElementaryTable] dcd A.1.1.1.2 (1 x 5)
+  [TableTree] cl B.1 [cont: 1 x 5]
+    [TableTree] AEDECOD
+      [ElementaryTable] dcd B.1.1.1.1 (1 x 5)
+```
+
+- To sort SOC groups (reorder `cl A.1`, `cl B.1`, ...): `path = c("AEBODSYS")`
+- To sort PTs within each SOC: `path = c("AEBODSYS", "*", "AEDECOD")`
+- To sort PTs within only `cl A.1`: `path = c("AEBODSYS", "cl A.1", "AEDECOD")`
+
+`[cont: 1 x 5]` indicates the subtable has a content table with 1 row -- meaning `summarize_row_groups()` was used and `cont_n_allcols` / `cont_n_onecol` score functions will work at this level.
+
+---
+
+## 3. Sorting: Path-Targeted Reordering of Sibling Subtrees or Rows
+
+### 3.1 `sort_at_path()` -- The Primary Sorting Entry Point
+
+```r
+sort_at_path(tt, path, scorefun, decreasing = NA, na.pos = "omit", ...)
+```
+
+`sort_at_path()` navigates separately to each subtable addressed by `path`, calls `scorefun` on each of its direct children, and reorders those children by the returned scores.
+
+- `path`: character vector of node names describing where to sort (see Section 2).
+- `scorefun`: function accepting a single child (subtable or row) and returning one scalar value (numeric or character).
+- `decreasing`: `NA` (default) auto-detects: `TRUE` for numeric scores, `FALSE` for character. Set explicitly when needed.
+- `na.pos`: `"omit"` (default) removes children with `NA` scores; `"last"` or `"first"` place them at the end or beginning.
+- `...`: additional named arguments forwarded to `scorefun` if it accepts them.
+
+### 3.2 `jj_complex_scorefun()` (junco) -- The Preferred Score Function
+
+```r
+jj_complex_scorefun(spanningheadercolvar = "colspan_trt", usefirstcol = FALSE,
+                    colpath = NULL, firstcat = NULL, lastcat = NULL,
+                    cellvalue_index = 1)
+```
+
+`jj_complex_scorefun()` is a score function constructor that automatically handles the column structure complexities common in clinical tables. **Use it as the default scorer when junco is available.**
+
+**How it selects the sort column:**
+1. If `colpath` is explicitly provided, scores by that column path (overrides all other column selection).
+2. If `spanningheadercolvar` is set (default `"colspan_trt"`), finds all columns under that spanning header whose second path element is not `" "` (i.e., active treatment columns), and scores by the **last** active treatment column.
+3. If `spanningheadercolvar = NA` (no spanning header), scores by the **first** treatment column.
+4. If `usefirstcol = TRUE`, scores by the first non-blank column regardless of spanning structure.
+
+**Category pinning:**
+- `firstcat`: name of a category to always sort first (receives score `Inf`).
+- `lastcat`: name of a category to always sort last (receives score `-99999`).
+- Categories named `" "` (blank spacer rows) are always sorted last (`-Inf`).
+
+**Cell value selection:** `cellvalue_index` (default `1`) selects which element of the cell value vector to score by (e.g., `1` = count for `a_freq_j` cells with `count_unique_fraction`).
+
+**Usage:**
+```r
+# Standard: sort by last active treatment arm count under colspan_trt
+sort_at_path(tbl, "AEBODSYS", jj_complex_scorefun(), decreasing = TRUE)
+sort_at_path(tbl, c("AEBODSYS", "*", "AEDECOD"), jj_complex_scorefun(), decreasing = TRUE)
+
+# Sort by a specific column path
+sort_at_path(tbl, "AEBODSYS", jj_complex_scorefun(colpath = c("TRT01A", "Placebo")))
+
+# Pin "Other" last while sorting by incidence
+sort_at_path(tbl, "AEBODSYS", jj_complex_scorefun(lastcat = "Other"), decreasing = TRUE)
+
+# No spanning header (flat column split)
+sort_at_path(tbl, "AEBODSYS", jj_complex_scorefun(spanningheadercolvar = NA))
+```
+
+`jj_complex_scorefun()` works on both `TableTree` subtables (with or without content tables) and `DataRow`s because it uses `cell_values()` directly rather than requiring content rows. This means it works at both SOC and PT levels without needing separate score functions.
+
+### 3.3 rtables Built-In Score Functions
+
+Use these when junco is not available.
+
+| Function | Scores By | Works On | Requires |
+|---|---|---|---|
+| `cont_n_allcols(tt)` | Sum of first cell values across all columns from the first content row | `TableTree` children with content tables | `summarize_row_groups()` at the corresponding layout position |
+| `cont_n_onecol(j)` | First cell value of column `j` from the first content row | `TableTree` children with content tables | `summarize_row_groups()` at the corresponding layout position |
+
+Both `cont_n_allcols` and `cont_n_onecol` operate on **content rows** (from `summarize_row_groups()`). They will error if applied at a path whose children are `DataRow`s (from `analyze()`) or subtables without content tables.
+
+### 3.4 Writing Custom Score Functions
+
+Write a custom score function only when `jj_complex_scorefun()` (junco) does not cover the requirement and no rtables built-in applies.
+
+A score function receives a single child element (a `TableTree` subtable or a `TableRow`) and must return **one scalar value** (numeric or character).
+
+**Useful accessors inside score functions:**
+
+| Accessor | Returns | Use When |
+|---|---|---|
+| `content_table(tt)` | The content table of a subtable (contains `summarize_row_groups()` rows) | Scoring subtables by their marginal summary values |
+| `tree_children(tt)` | List of direct children (subtables or rows) | Navigating deeper into the structure |
+| `row_values(tt)` | Named list of cell values for a single row | Scoring `DataRow`s (from `analyze()`) |
+| `cell_values(tt, rowpath, colpath)` | Cell values at specific row/column paths | Extracting values from specific rows or columns within a subtable |
+| `obj_name(tt)` | The structural name of the element (used in paths) | Character-based sorting (e.g., alphabetical) |
+| `obj_label(tt)` | The display label (may differ from name) | Display-aware sorting |
+
+**Pattern A -- Score subtables by content row values (like `cont_n_allcols` but for a specific column path):**
+```r
+score_by_col <- function(colpath) {
+  function(tt) {
+    ctab <- content_table(tt)
+    crow <- tree_children(ctab)[[1]]
+    unlist(cell_values(crow, colpath = colpath), use.names = FALSE)[1]
+  }
+}
+# Sort SOCs by count in the placebo column
+sort_at_path(tbl, "AEBODSYS", score_by_col(c("ARM", "B: Placebo")))
+```
+
+**Pattern B -- Score `DataRow`s (analysis rows from `analyze()`):**
+```r
+scorefun <- function(tt) {
+  sum(unlist(row_values(tt)))
+}
+# Sort analysis rows (e.g., mean/median) within each leaf
+sort_at_path(tbl, c("RACE", "*", "STRATA1", "*", "AGE"), scorefun)
+```
+
+**Pattern C -- Score subtables by a specific analysis row within them:**
+```r
+score_by_any_grade <- function(tt) {
+  # Navigate to a specific row inside the subtable
+  row <- cell_values(tt, rowpath = c("AETOXGR", "Any Grade"))
+  sum(unlist(row))
+}
+sort_at_path(tbl, c("AEBODSYS", "*", "AEDECOD"), score_by_any_grade)
+```
+
+**Pattern D -- Score with column path for nested/spanned column structures:**
+```r
+score_onecol <- function(colpath) {
+  function(tt) {
+    unlist(cell_values(tt, colpath = colpath), use.names = FALSE)[1]
+  }
+}
+# Sort by female count in arm C (column position determined by full column path)
+sort_at_path(tbl, c("RACE", "*", "STRATA1"),
+  score_onecol(c("ARM", "C: Combination", "SEX", "F")))
+```
+
+**Pattern E -- Pin a specific category last (or first) regardless of score:**
+
+Prefer `jj_complex_scorefun(lastcat = "Other")` (Section 3.2) when junco is available. Without junco:
+```r
+last_cat_scorefun <- function(x, decreasing, lastcat) {
+  mycat <- obj_name(x)
+  if (mycat == lastcat) {
+    ifelse(isTRUE(decreasing), -Inf, Inf)
+  } else {
+    cont_n_allcols(x)
+  }
+}
+# Sort by count but always keep "Other" last -- must pass decreasing explicitly
+sort_at_path(tbl, "AEBODSYS", last_cat_scorefun, decreasing = TRUE, lastcat = "Other")
+```
+
+> Note: `sort_at_path` auto-forwards `decreasing` to score functions that accept it as a formal. The `decreasing = TRUE` in the call is required here so the pin logic (`isTRUE(decreasing)`) works correctly.
+
+**Pattern F -- Alphabetical or character-based sorting:**
+```r
+alpha_scorer <- function(tt) obj_name(tt)
+sort_at_path(tbl, "RACE", alpha_scorer)
+# decreasing auto-set to FALSE for character scores
+```
+
+### 3.5 Passing Extra Arguments to Score Functions
+
+`sort_at_path()` forwards `...` arguments to `scorefun` if `scorefun` accepts them (or accepts `...`). The `decreasing` argument is also automatically forwarded if `scorefun` has a `decreasing` formal.
+
+```r
+my_score <- function(tt, decreasing, threshold) {
+  val <- cont_n_allcols(tt)
+  if (val < threshold) NA_real_ else val
+}
+sort_at_path(tbl, "AEBODSYS", my_score, decreasing = TRUE, threshold = 5)
+```
+
+---
+
+## 4. Common Post-Processing Recipes
+
+### 4.1 Standard AE Table: Prune Empty + Sort SOC and PT by Decreasing Incidence
+
+This is the most common post-processing pattern for adverse event tables with a `split_rows_by("AEBODSYS") |> summarize_row_groups() |> analyze("AEDECOD")` row structure.
+
+**With junco (preferred):**
+```r
+tbl <- build_table(lyt, adae, alt_counts_df = adsl) |>
+  safe_prune_table() |>
+  sort_at_path("AEBODSYS", jj_complex_scorefun(), decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD"), jj_complex_scorefun(), decreasing = TRUE)
+```
+
+`jj_complex_scorefun()` works at both SOC and PT levels because it uses `cell_values()` directly, avoiding the content-table dependency of `cont_n_allcols`.
+
+**Without junco** -- `cont_n_allcols` works at the SOC level (which has `summarize_row_groups()`), but will error at the PT level when PT children are `DataRow`s (the common `analyze("AEDECOD")` case). Use a custom scorer for the inner sort:
+
+```r
+pt_scorefun <- function(tt) {
+  sum(sapply(row_values(tt), function(cv) cv[1]))
+}
+
+tbl <- build_table(lyt, adae, alt_counts_df = adsl) |>
+  prune_table() |>
+  sort_at_path("AEBODSYS", cont_n_allcols, decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD"), pt_scorefun, decreasing = TRUE)
+```
+
+### 4.2 Sort by a Single Reference Column (e.g., Placebo Arm)
+
+When the table specification says "sort by incidence in the reference arm":
+
+**With junco:**
+```r
+# Sort by a specific column via colpath
+sort_at_path(tbl, "AEBODSYS",
+  jj_complex_scorefun(colpath = c("TRT01A", "Placebo")), decreasing = TRUE)
+```
+
+**Without junco:**
+```r
+# For content-row-based subtables (SOC with summarize_row_groups)
+sort_at_path(tbl, "AEBODSYS", cont_n_onecol(j), decreasing = TRUE)
+# where j is the integer column index of the reference arm
+
+# For spanned/nested column structures, use column path instead:
+ref_col_scorer <- function(tt) {
+  ctab <- content_table(tt)
+  crow <- tree_children(ctab)[[1]]
+  unlist(cell_values(crow, colpath = c("ARM", "B: Placebo")), use.names = FALSE)[1]
+}
+sort_at_path(tbl, "AEBODSYS", ref_col_scorer, decreasing = TRUE)
+```
+
+### 4.3 Sort by Total Column When Using `add_overall_col()`
+
+```r
+# If "All" is the last column, use cont_n_onecol with its index
+sort_at_path(tbl, "AEBODSYS", cont_n_onecol(ncol(tbl)), decreasing = TRUE)
+```
+
+### 4.4 Multi-Level Hierarchical Sort (SOC -> PT -> Grade)
+
+For a 3-level hierarchy `AEBODSYS -> AEDECOD -> AETOXGR`:
+
+**With junco:**
+```r
+tbl <- build_table(lyt, adae, alt_counts_df = adsl) |>
+  safe_prune_table() |>
+  sort_at_path("AEBODSYS", jj_complex_scorefun(), decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD"), jj_complex_scorefun(), decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD", "*", "AETOXGR"),
+    jj_complex_scorefun(), decreasing = TRUE)
+```
+
+**Without junco:**
+```r
+tbl <- build_table(lyt, adae, alt_counts_df = adsl) |>
+  prune_table() |>
+  sort_at_path("AEBODSYS", cont_n_allcols, decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD"), cont_n_allcols, decreasing = TRUE) |>
+  # Grade rows are DataRows, need custom scorer
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD", "*", "AETOXGR"),
+    function(tt) sum(unlist(row_values(tt))), decreasing = TRUE)
+```
+
+### 4.5 Sorting with Spanning Column Headers (e.g., `grouped_cols_w_diffs()`)
+
+When the column structure uses spanning headers with risk difference columns, `cont_n_allcols` sums across **all** columns including risk difference columns, which may produce unexpected scores.
+
+**With junco (preferred):** `jj_complex_scorefun()` handles this automatically -- it identifies the active treatment columns under `colspan_trt` and scores by the last one, ignoring risk difference columns:
+
+```r
+sort_at_path(tbl, "AEBODSYS", jj_complex_scorefun(), decreasing = TRUE)
+sort_at_path(tbl, c("AEBODSYS", "*", "AEDECOD"), jj_complex_scorefun(), decreasing = TRUE)
+```
+
+**Without junco**, use a column-path-based scorer to target specific treatment arm columns:
+
+```r
+score_trt_arms_only <- function(tt) {
+  ctab <- content_table(tt)
+  crow <- tree_children(ctab)[[1]]
+  arms <- c("A: Drug X", "C: Combination", "B: Placebo")
+  sum(vapply(arms, function(a) {
+    unlist(cell_values(crow, colpath = c("colspan_trt", "*", "ARM", a)),
+           use.names = FALSE)[1]
+  }, numeric(1), USE.NAMES = FALSE))
+}
+```
+
+> Note: The column path `c("colspan_trt", "*", "ARM", a)` depends on the specific column layout function used. Verify with `col_paths_summary(tbl)` if using a different column structure.
+
+---
+
+## 5. Debugging Sort and Prune Issues
+
+### 5.1 "No content table" Errors from `cont_n_allcols` / `cont_n_onecol`
+
+These rtables built-in scorers require `summarize_row_groups()` at the corresponding layout position. If the path targets children that are `DataRow`s or subtables without content rows, use `jj_complex_scorefun()` (junco) which works on both, or write a custom scorer using `row_values()` or `cell_values()`.
+
+### 5.2 "Unable to find child" Errors
+
+The path element does not match any child name at that position. Use `table_structure(tbl)` or `row_paths_summary(tbl)` to inspect valid names. Common causes:
+- Using a display **label** instead of the structural **name** (check with `obj_name()`).
+- Missing the analysis variable name in the path (e.g., `"AGE"` must appear even if its label row is hidden).
+- The subtree was already removed by pruning.
+
+### 5.3 Exploring Score Function Inputs with `browser()`
+
+Insert `browser()` at the top of your score function to interactively inspect what `tt` looks like:
+
+```r
+debug_scorer <- function(tt) {
+  browser()
+  # Inspect: class(tt), obj_name(tt), content_table(tt), row_values(tt), cell_values(tt)
+  cont_n_allcols(tt)
+}
+sort_at_path(tbl, "AEBODSYS", debug_scorer)
+```
+
+### 5.4 Verifying Sort Results
+
+After sorting, use `row_paths_summary(tbl)` to confirm the new order, or print the table and visually inspect. For programmatic verification:
+
+```r
+# Extract the names of SOC children in their current order
+soc_kids <- tree_children(tt_at_path(tbl, "AEBODSYS"))
+vapply(soc_kids, obj_name, "")
+```
+
+---
+
+## 6. Relationship to Layout-Time Ordering
+
+Some ordering requirements are better handled at layout time rather than post-build:
+
+| Requirement | Approach |
+|---|---|
+| Fixed, known level order (e.g., severity grades) | `reorder_split_levels(neworder = ...)` in `split_fun` |
+| Drop unobserved levels | `drop_split_levels` in `split_fun` |
+| Keep specific levels only | `keep_split_levels(only = ...)` in `split_fun` |
+| Data-driven frequency ordering | **Post-build `sort_at_path()`** (this skill) |
+| Remove empty subtrees | **Post-build `safe_prune_table()`** (this skill) |
+| Remove subtrees below a count threshold | **Post-build `safe_prune_table(low_obs_pruner(...))`** (this skill) |
+| Remove rows below a percentage threshold | **Post-build `safe_prune_table(bspt_pruner(...))`** (this skill) |
+
+**Rule of thumb:** If the order is known before tabulation, use `split_fun`. If the order depends on computed cell values, use `sort_at_path()` after `build_table()`.

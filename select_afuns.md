@@ -284,6 +284,9 @@ Once you have identified the correct `afun`/`cfun` from the decision matrix abov
   - Automatically detects risk difference columns via `ref_path` (e.g., `c("colspan_trt", " ", "TRT01A", "Placebo")`).
   - In main arm columns, displays the requested `.stats`; in risk difference columns, blanks out non-comparative stats and displays the percentage point difference and CI (`xx.x (xx.x, xx.x)`).
   - Supports 11 `method` options: `"wald"`, `"waldcc"`, `"cmh"`, `"ha"`, `"newcombe"`, `"newcombecc"`, `"strat_newcombe"`, `"strat_newcombecc"`, `"cmh_sato"`, `"cmh_mn"`, `"uncond_exact_diff"`.
+- **Column Restriction (`restr_columns`)**:
+  - A KEEP list of leaf column labels: columns whose leaf label (case-insensitive match on `tail(.spl_context$cur_col_split_val, 1)`) is not in `restr_columns` are blanked out. Use when a single `analyze()` or `summarize_row_groups()` call should only populate a subset of columns (e.g., `restr_columns = c("N")` to populate only the `N` column in a shift table layout while blanking baseline-level and Total columns).
+  - Distinct from `riskdiff`: `riskdiff` toggles behavior between arm columns and risk-difference columns; `restr_columns` restricts output to an arbitrary subset of leaf columns by name.
 - **Filtering, Level Manipulation & Relabeling**:
   - Single-flag summary row: `analyze("TRTEMFL", afun = a_freq_j, extra_args = list(val = "Y", label = "Subjects with >=1 AE", ...))` tabulates only level `"Y"` and labels the row `"Subjects with >=1 AE"`.
   - Level control: `drop_levels`, `excl_levels`, `new_levels`, `new_levels_after`, `addstr2levs`.

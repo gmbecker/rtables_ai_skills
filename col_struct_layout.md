@@ -284,6 +284,17 @@ Core rules for custom split functions:
 
 ## 6. Canonical Advanced Column Structure Archetypes
 
+> **Quick Index** — Archetype → key functions / concepts:
+>
+> | # | Archetype | Key Functions / Concepts |
+> |---|---|---|
+> | 1 | Grouped Treatments with Pairwise Difference Columns | `grouped_cols_w_diffs()`, `create_colspan_var()`, `create_colspan_map()`, combo arms, risk-difference columns |
+> | 2 | Treatment Arms Subdivided by Subgroups (± Totals) | `grouped_cols_w_subgrps()`, `add_overall_level()`, within-arm Total facet |
+> | 3 | Shift Table (Clinical Laboratory / Toxicity) | `shift_tbl_col_struct()`, cross-tabulation columns, N / baseline-level / Total structure |
+> | 4 | "Some vs All" / Non-Mutually Exclusive Comparisons | `some_v_all_col_struct()`, `add_combo_facet()`, `restrict_facets()` |
+> | 5 | Longitudinal Visits with Conditional Change-from-Baseline | `split_cols_by_multivar()`, `.spl_context` post-hook, conditional facet removal |
+> | 6 | Per-Parent Data-Driven Quantile Bins | `make_split_fun(core_split = ...)`, per-facet `quantile()` + `cut()` |
+
 ### Archetype 1: Grouped Treatments with Pairwise Difference Columns
 
 #### Primary Solution (using `junco`):
@@ -491,7 +502,7 @@ basic_table(show_colcounts = TRUE) |>
 
 ### 7.1 Controlling Column Count Denominators at Build Time
 1. **Default (`df` counts)**: `build_table(lyt, df)` counts rows of `df` in each column facet.
-2. **Subject-level population dataset (`alt_counts_df`)**: When `df` is an event-level or repeated-measures dataset (`ADAE`, `ADLB`, `ADVS`), pass `alt_counts_df = adsl` so header counts reflect subjects in `adsl`. Every column split variable must exist in `alt_counts_df`.
+2. **Subject-level population dataset (`alt_counts_df`)**: When `df` is an event-level or repeated-measures dataset (`ADAE`, `ADLB`, `ADVS`), pass `alt_counts_df = adsl` so header counts reflect subjects in `adsl`. Every column split variable must exist in `alt_counts_df`. Only use when counts calculated on the primary df would be incorrect; otherwise omit the `alt_counts_df` argument (rtables >= 0.6.17) or explicitly pass df to it again (rtables < 0.6.17).
 3. **Manual vector override (`col_counts`)**: Pass `col_counts = c(100L, 105L, ...)` to `build_table(...)`.
 
 ### 7.2 Post-Build Mutation on `tbl`

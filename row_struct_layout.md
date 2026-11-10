@@ -464,6 +464,19 @@ basic_table() |>
 
 ## 6. Catalog of Canonical Row Structure Archetypes
 
+> **Domain Keyword Index** — If the target table matches a domain pattern below, start with the indicated archetype(s). If no match, continue to the full pipeline table.
+>
+> | Domain / Semantic Pattern | Archetype(s) |
+> |---|---|
+> | Standard AE table (overall + SOC → PT) | 4 |
+> | Disposition / selective drill-down (e.g., only "DISCONTINUED" expands) | 16 |
+> | Shift table / cross-tabulation rows | 3 or 6 |
+> | Demographics (stacked summary statistics) | 1 |
+> | Subgroup forest-plot rows (Overall → By Sex → By Stratum) | 10 |
+> | Lab / vitals by parameter × visit | 15, 17, 18 |
+> | Concomitant medications (ATC → preferred name) | 3 |
+> | Toxicity grade breakdown with "Any Grade" total | 13, 14 |
+
 Use this lookup table to map any desired visual row structure to its canonical `rtables` layout pipeline:
 
 | # | Row Structure Archetype | Canonical Layout Pipeline |

@@ -14,6 +14,7 @@ This master skill orchestrates the complete translation of a desired table (typi
 > 2. **Row Faceting Structure** $\longrightarrow$ Defer to **[row_struct_layout.md](./row_struct_layout.md)**
 > 3. **Marginal Group Summary (`cfun`) & Leaf Analysis (`afun`) Selection** $\longrightarrow$ Defer to **[select_afuns.md](./select_afuns.md)** *(also referred to as `selecting_afuns.md`)*
 > 4. **Custom `afun` / `cfun` Extension & Construction (Escalation Only)** $\longrightarrow$ Defer to **[custom_afuns.md](./custom_afuns.md)** **only** when the selection process in [select_afuns.md](./select_afuns.md) confirms that no existing `junco` or `tern` function can satisfy the requirement via `extra_args` alone.
+> 5. **Post-Build Sorting & Pruning** $\longrightarrow$ Defer to **[introspection_sort_prune.md](./introspection_sort_prune.md)** when the table specification calls for removing empty/low-count rows or reordering rows by computed cell values (e.g., "sort by decreasing incidence").
 >
 > Use **this orchestrator skill** to decompose the shell, coordinate the sub-tasks in order, enforce cross-dimension integration contracts (data preprocessing, `alt_counts_df`, `ref_path`, `denom_by`, `multivars`, and top-left labels), and assemble the final `build_table()` pipeline.
 
@@ -57,6 +58,7 @@ flowchart TD
     S1 --> S2 --> S3 --> S4
     S4 -- "Existing afun/cfun found" --> S5
     S4 -- "No suitable existing afun/cfun" --> S4_ESC --> S5
+    S5 --> S6["Stage 6: Post-Build Sorting & Pruning<br/>(Defer to introspection_sort_prune.md)<br/>prune_table() then sort_at_path()"]
 ```
 
 ---
@@ -179,6 +181,29 @@ tbl <- build_table(lyt, df = anl_df, alt_counts_df = adsl)
 ```
 
 Before executing `build_table()`, verify all **Six Cross-Dimension Integration Contracts** in Section 3 below.
+
+---
+
+### Stage 6: Post-Build Sorting & Pruning $\longrightarrow$ Defer to [`introspection_sort_prune.md`](./introspection_sort_prune.md)
+
+After `build_table()` returns, apply post-processing when the table specification requires:
+- **Removing empty or low-count rows/subtrees** (e.g., "omit SOCs with zero subjects").
+- **Reordering rows by computed cell values** (e.g., "sort SOC and PT by decreasing incidence").
+
+**Always prune before sorting** — pruning removes empty subtrees that would otherwise cause score function errors or produce misleading sort orders.
+
+```r
+tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
+  prune_table() |>
+  sort_at_path("AEBODSYS", cont_n_allcols, decreasing = TRUE) |>
+  sort_at_path(c("AEBODSYS", "*", "AEDECOD"), pt_scorefun, decreasing = TRUE)
+```
+
+Consult **[introspection_sort_prune.md](./introspection_sort_prune.md)** for:
+- Built-in and custom pruning functions (`prune_empty_level`, `low_obs_pruner`, custom `prune_func`).
+- Built-in and custom score functions (`cont_n_allcols`, `cont_n_onecol`, column-path-based scorers, pinning categories last).
+- Path construction rules, wildcard usage, and debugging techniques.
+- Recipes for common patterns (AE incidence sort, reference-column sort, multi-level hierarchical sort, spanning-header-aware sort).
 
 ---
 
@@ -518,7 +543,7 @@ When adapting an existing template layout script rather than starting from scrat
 
 ## 6. Master End-to-End Verification Checklist
 
-Before delivering any `rtables` + `junco` table implementation, verify all 8 items:
+Before delivering any `rtables` + `junco` table implementation, verify all 9 items:
 
 1. **Column Structure Verified ([`col_struct_layout.md`](./col_struct_layout.md))**:
    - Does the column header hierarchy, spanning label alignment, and `(N=xx)` visibility match the shell?
@@ -544,4 +569,9 @@ Before delivering any `rtables` + `junco` table implementation, verify all 8 ite
    - Are parameter-specific decimal precisions (`formats_var = "fmt_d"`) or significant figures (`format_sigfig_j()`) wired with `.formats = "default"` where required?
 8. **Top-Left & Section Dividers**:
    - Are `label_pos = "topleft"`, `append_topleft()`, `section_div`, and `top_level_section_div` aligned with the shell's visual layout?
+9. **Post-Build Sorting & Pruning ([`introspection_sort_prune.md`](./introspection_sort_prune.md))**:
+   - If the specification calls for sorting by incidence or removing empty rows, is `prune_table()` called before `sort_at_path()`?
+   - Do the sort paths match the actual table structure (verify with `table_structure()` or `row_paths_summary()`)?
+   - Does the score function match the type of children at the sort path (content-row-based for subtables with `summarize_row_groups()`, `row_values`-based for `DataRow`s from `analyze()`)?
+   - For spanning column layouts, does the score function target the correct column(s) rather than inadvertently including risk difference columns?
 
