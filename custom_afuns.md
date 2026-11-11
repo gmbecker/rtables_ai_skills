@@ -24,12 +24,39 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
  │               `var_labels = "...", show_labels = "visible"` on the `analyze()` call.
  │               Do NOT write a custom function or wrapper. Defer to `[select_afuns.md](./select_afuns.md)`.
  │
- ├─► Tier 1: Can an existing `junco` or `tern` function do this via `extra_args`?
- │     • Check `a_freq_j`, `a_summary_j`, `a_two_tier`, `a_summarize_aval_chg_diff_j`,
- │       `a_maxlev`, `a_eair100_j`, `c_summary_subset_label`, `column_stats`, etc.
- │     • Check `.stats`, `.formats`, `.labels`, `.indent_mods`, `denom`, `denom_by`,
- │       `ref_path`, `riskdiff`, `comp_btw_group`, `exclude_visits`, `drill_down_levs`.
- │     └──► YES: Do NOT write a custom function. Defer to `[select_afuns.md](./select_afuns.md)`.
+ ├─► Tier 1: Parameter Space Search — Can an existing function satisfy the requirement
+ │           under SOME parameterization?
+ │     Tier 1 is not a single check — it is a **search over the joint parameter space**
+ │     of (function, `.var`, `.stats`, `extra_args`, data-prep-derived variables).
+ │     A single failed parameterization does not exhaust Tier 1. Before concluding that
+ │     no existing function can satisfy the requirement:
+ │     1. **Identify candidate functions** from the select_afuns.md decision matrix (Section 3).
+ │        There may be more than one.
+ │     2. **For each candidate, enumerate the parameter dimensions** that could vary.
+ │        Use the **master catalog** (select_afuns.md Section 4) and the **detailed
+ │        per-function guides** (select_afuns.md Section 5) as the lookup tables for
+ │        valid values in each dimension — they list every supported `.stats` value,
+ │        every `denom` option, and every `extra_args` key per function:
+ │        - `.var`: Could a different variable (especially a binary flag derived in data
+ │          prep) produce the correct row structure?
+ │        - `.stats`: Could a different statistic produce the correct cell values?
+ │          (Consult the "Statistics Supported (`.stats`)" column in the Section 4 catalog.)
+ │        - `extra_args`: Could `val`, `label`, `denom`, `denom_by`, `exclude_levels`,
+ │          or other configuration arguments close the gap? (Consult the
+ │          "Other Customization (`extra_args`)" column in the Section 4 catalog and
+ │          the detailed parameter descriptions in Section 5.)
+ │        - Data prep: Could deriving a new variable (flag, recoded factor, bucketed
+ │          continuous) make the function work?
+ │     3. **If an attempt fails, diagnose which dimension caused the failure** before
+ │        trying another combination or escalating. The most common misdiagnosis is
+ │        attributing a failure to a function's capability when the actual cause is the
+ │        choice of `.var` or a missing `val`/`label` argument.
+ │     4. **Record the search** in the implementation log (see Section 1.1).
+ │     Only escalate to Tier 2 when you can state a **specific capability gap** that no
+ │     parameterization of any candidate function can bridge — not merely that one
+ │     parameterization produced wrong output.
+ │     └──► YES (any parameterization works): Do NOT write a custom function.
+ │               Defer to `[select_afuns.md](./select_afuns.md)`.
  │               (If the only remaining gap is a missing section-header label, see Tier 0.)
  │
  ├─► Tier 2: Does an existing `s_*` or `a_*` function compute the right values,
@@ -64,6 +91,26 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
 
 > [!IMPORTANT]
 > **Leading Section-Header Invariant (ALL tiers 1–5)**: If the custom `afun` needs a leading label-only header row (blank cells with a visible stub label) as the first row of its output, do **not** emit it via `rcell(NULL)` inside the `afun`. Instead, use `var_labels = "Header Text", show_labels = "visible"` on the `analyze()` call — this is Tier 0, not a reason to write a custom function. `rcell(NULL)` inside an `afun` is only permitted for label-only rows **interspersed among** analysis rows (see Building Block 6, Section 7).
+
+---
+
+### 1.1 Tier 1 Search Log (Mandatory Before Escalation)
+
+Before escalating past Tier 1, the implementation log must contain a search record with the following structure:
+
+```
+Tier 1 Search: [requirement description]
+  Candidate 1: [function name]
+    Attempt 1a: .var = "...", .stats = "...", extra_args = list(...)
+      Result: [what happened — e.g., "produced N rows per subject instead of 1"]
+      Diagnosis: [which dimension caused the failure — e.g., ".var is high-cardinality; a_freq_j enumerates all levels of .var"]
+    Attempt 1b: .var = "...", .stats = "...", extra_args = list(...)
+      Result: [correct / still wrong because ...]
+  Candidate 2: [function name] — not applicable because [reason]
+  Escalation decision: [specific capability gap, or "Attempt 1b succeeded — no escalation needed"]
+```
+
+The log need not be verbose — a few lines per candidate suffices — but it must demonstrate that the parameter space was searched, not that a single point was sampled.
 
 ---
 
@@ -571,6 +618,9 @@ Understanding `rtables` format precedence is essential when deciding whether to 
 >
 > The `rcell(NULL)` pattern inside an `afun` is **only** permitted when a label-only row must appear **interspersed among** analysis rows within a single `analyze()` call's output — i.e., when the label-only row is *not* the first row and cannot be expressed as the `analyze()` variable label.
 
+> **General Principle: Externalize Labels to the Layout**
+> Row labels that appear in the table stub should be controlled by the layout (`var_labels`, `show_labels`, `split_label`, `label_pos`, `labels_var`) whenever possible, not hardcoded inside the `afun`/`cfun`. This ensures labels are visible in the layout code (improving readability and auditability), can be changed without modifying the function, and follow `rtables`' structural model where the layout controls presentation and the afun controls computation. Hardcoding a label inside an afun is acceptable only when the label is **data-driven** (e.g., derived from `.spl_context` or computed from cell values) or when the afun emits multiple rows with distinct labels that cannot be expressed via layout-level mechanisms.
+
 #### When to use `var_labels` + `show_labels` (PREFERRED — all non-interspersed cases)
 
 Whenever a section of rows needs a leading header with blank cells, set the header text on the `analyze()` call:
@@ -592,7 +642,16 @@ The `afun` then emits only the data rows (no leading label row). This works for 
 
 #### When `rcell(NULL)` inside an `afun` IS permitted (interspersed labels only)
 
-Use `in_rows("label" = rcell(NULL, format = "xx"))` **only** when a label-only row must appear *between* analysis rows within a single `analyze()` call — for example, when a custom afun emits rows from two different sub-sections and needs an internal divider label between them:
+Use `in_rows("label" = rcell(NULL, format = "xx"))` **only** when a label-only row must appear *between* analysis rows within a single `analyze()` call — for example, when a custom afun emits rows from two different sub-sections and needs an internal divider label between them.
+
+> [!WARNING]
+> **Stacking + Interspersed Labels = Row Structure Smell**
+> If a custom afun stacks calls to existing afuns (Pattern 2B) with `rcell(NULL)` label rows interspersed between them to create named sections, this is a signal that the row structure is being encoded in the wrong place. Before writing such an afun, go back to the row layout (row_struct_layout.md) and determine whether the sections can be expressed as **separate `analyze()` calls**, each with its own `var_labels = "Section Name", show_labels = "visible"`. This is almost always possible and produces a cleaner layout where:
+> - Each section's label is visible in the layout code, not buried inside a function body.
+> - Each `analyze()` call can independently select its own afun, `.var`, and `extra_args` via the normal Tier 1 parameter space search.
+> - The resulting table tree has proper `LabelRow` nodes addressable by path, rather than `DataRow` nodes containing `NULL` cells.
+>
+> Reserve the stacking + interspersed label pattern for cases where the label rows are **data-driven** (e.g., labels derived from `.spl_context` or computed from cell values) or where the stacked blocks share state that cannot be passed between separate `analyze()` calls.
 
 ```r
 # Two sub-sections within one afun, with an interspersed label between them

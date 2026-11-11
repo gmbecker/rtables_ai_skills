@@ -71,11 +71,16 @@ Before writing layout code, inspect the shell and answer four questions:
    - **Subject-level table** (Demographics, Disposition, Baseline Characteristics): `df` is `adsl`. Usually `alt_counts_df` is not needed (or `alt_counts_df = adsl` if `df` is pre-filtered).
    - **Event-level or repeated-measures table** (Adverse Events `adae`, Concomitant Meds `adcm`, Labs `adlb`, Vital Signs `advs`, Exposure `adex`): `df` is the event/visit dataset, and **`alt_counts_df = adsl` is mandatory** so column header counts `(N=xx)` and subject-level percentage denominators reflect the full treated/safety population rather than only patients with events.
 2. **What is the Column Header Topology?**
-   - Identify spanning headers, treatment arms, virtual combination arms (e.g., `"All Active"`), non-nested comparison branches (e.g., `"Risk Difference (%) (95% CI)"`), or multi-variable sub-columns (`n/N (%)`, `Mean`, `Change from Baseline`).
+   - Classify the topology: asymmetric hierarchy (parent-dependent children), symmetric hierarchy (uniform children), sibling non-nested branches, multi-variable sub-columns, or cross-tabulation.
+   - Identify spanning headers, leaf-level grouping variables, virtual combination levels (e.g., `"All Active"`), and non-nested comparison branches (e.g., `"Risk Difference (%) (95% CI)"`).
+   - The grouping variable need not be a treatment arm — it can be any categorical subject classification (ADA status, biomarker category, exposure quartile, geographic region). The topology classification is the same regardless of what the variable represents.
 3. **What is the Row Faceting Hierarchy?**
    - Identify top-level sections, nested row groups (e.g., `AEBODSYS -> AEDECOD`, `RACE -> SEX`, `PARAM -> AVISIT`), which group headers carry marginal summary values (`summarize_row_groups`) vs. pure labels, and where labels sit (`label_pos = "topleft"`, `"visible"`, or `"hidden"`).
 4. **What are the Cell Contents (Marginal `cfun` vs. Leaf `afun`)?**
    - For each row section and group header, note the statistic format (`xx (xx.x%)`, `xx / xx (xx.x%)`, `Mean (SD)`, `LS Mean (95% CI)`), unit of counting (unique subjects vs. events), denominator population, and any column- or row-conditional behavior.
+5. **What is the record granularity of each dataset?**
+   - For each dataset that will serve as `df` or `alt_counts_df`, determine the observational unit: Is there one row per subject (`adsl`), one row per subject per visit (`advs`, `adlb` — verify!), one row per event (`adae`), or some other structure?
+   - **Verify empirically** (e.g., `nrow(df) == nrow(distinct(df, USUBJID, AVISIT, PARAMCD))`) rather than assuming. Record the verified granularity in the implementation log. This determines whether row-counting mechanisms (default `summarize_row_groups`, `nrow(df)`) can serve as subject counts or whether explicit deduplication is required.
 
 ---
 
@@ -83,13 +88,17 @@ Before writing layout code, inspect the shell and answer four questions:
 
 Consult **[col_struct_layout.md](./col_struct_layout.md)** to implement the column header layout:
 
-1. **Prefer High-Level `junco` Column Generators First**:
-   - Active vs. Comparator spanning header + pairwise difference columns $\to$ `create_colspan_var()`, `create_colspan_map()`, and **`grouped_cols_w_diffs()`**.
-   - Arms subdivided by subgroups/quartiles $\to$ **`grouped_cols_w_subgrps()`**.
-   - Shift tables (`N | Baseline [Low | Normal | High] | Total`) $\to$ **`shift_tbl_col_struct()`**.
-   - Non-mutually exclusive subsets (`All Grades` vs. `Grades 3-5`) $\to$ **`some_v_all_col_struct()`**.
-   - Statistics in columns (`N`, `Mean`, `SD`, `SE`, `Med`, `Min`, `Max`) $\to$ `split_cols_by_multivar(...)` + **`stats_in_cols_setup()`**.
-   - Pure `rtables` fallback or standard layouts $\to$ `split_cols_by*()`, `add_overall_col()`, `add_combo_levels()`, `trim_levels_to_map()`.
+1. **Classify the Column Topology, Then Select Implementation**:
+   - **Asymmetric consistent-depth hierarchy** (different inner leaf levels under different outer spans — e.g., ADA status × titer buckets, body system × preferred terms): Use `split_cols_by(outer_var, split_fun = trim_levels_in_group(inner_var)) |> split_cols_by(inner_var)` for empirical trimming, or `trim_levels_to_map(map)` when the parent→child mapping is fixed. See col_struct_layout.md Section 2.1 and Section 4.
+   - **Symmetric consistent-depth hierarchy** (same inner levels under every outer span — e.g., treatment arms × visit): Chained `split_cols_by` calls without trimming.
+   - **Sibling (non-nested) comparison branches** (e.g., treatment arms + risk difference columns side-by-side): `grouped_cols_w_diffs()` or manual `split_cols_by(..., nested = FALSE)`.
+   - **Arms subdivided by subgroups** (e.g., each arm split by sex, with optional within-arm total): `grouped_cols_w_subgrps()`.
+   - **Cross-tabulation / shift structure** (e.g., N | Baseline levels | Total): `shift_tbl_col_struct()`.
+   - **Non-mutually-exclusive cohort subsets** (e.g., All AEs vs. Related AEs): `some_v_all_col_struct()`.
+   - **Statistics as columns** (e.g., N, Mean, SD, SE as separate columns): `stats_in_cols_setup()` with `split_cols_by_multivar()`.
+   - **Pure `rtables` fallback or standard layouts**: `split_cols_by*()`, `add_overall_col()`, `add_combo_levels()`, `trim_levels_to_map()`.
+
+   > **Note on junco column generators**: `grouped_cols_w_diffs`, `grouped_cols_w_subgrps`, `shift_tbl_col_struct`, and `some_v_all_col_struct` implement **fixed hierarchical column topologies**, not treatment-arm-specific logic. Their argument names (`trtvar`, `colspan_trt_map`) reflect the most common use case, but the functions operate on arbitrary factor variables. A `grouped_cols_w_subgrps(trtvar = "ADA_STATUS", subgrp_var = "TITER_BUCKET")` call is perfectly valid.
 2. **Configure Column Counts (`(N=xx)`)**:
    - Set `show_colcounts = TRUE` and `colcount_format = "N=xx"` (or `"(N=xx)"`) either globally in `basic_table()` or selectively on the primary arm `split_cols_by()` call (so comparison/risk-difference columns do not display nonsensical `(N=xx)` headers).
 3. **Isolated Verification**:
@@ -115,6 +124,9 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
    - Place `summarize_row_groups()` **immediately after** each `split_rows_by*()` whose group header row displays summary statistics in its cells.
    - Leave `child_labels = "default"` when `summarize_row_groups()` emits a single row that acts as the facet's header row; set `child_labels = "visible"` **only** when `summarize_row_groups()` emits multiple summary rows indented *beneath* a plain facet label row.
 3. **Select Row Split Functions (`split_fun`)**:
+
+   > **Note**: All built-in split functions (`drop_split_levels`, `keep_split_levels`, `remove_split_levels`, `trim_levels_in_group`, `trim_levels_to_map`, `add_overall_level`, `add_combo_levels`) and custom split functions built with `make_split_fun` work identically for both `split_rows_by` and `split_cols_by`. The examples in this section use row splits, but the same patterns apply to column splits.
+
    - **Hierarchically dependent variables** (`AEBODSYS -> AEDECOD` or `REGION -> COUNTRY`): Use `trim_levels_in_group("AEDECOD")` on the outer split (empirical) or `trim_levels_to_map(map)` (prescriptive).
    - **Uniform inner scale across all outer groups** (`RACE -> SEX` or `AEBODSYS -> AETOXGR`): Use `keep_split_levels(...)`, `remove_split_levels(...)`, or `add_overall_level(...)` on the inner split—**never** `drop_split_levels` on the inner split unless ragged inner levels are desired.
    - **Single-variable empirical vs. prescriptive filtering**: Use `drop_split_levels` on outer splits to omit empty categories, or `keep_split_levels()` / `remove_split_levels()` for fixed categories.
@@ -137,6 +149,7 @@ First, consult **[select_afuns.md](./select_afuns.md)** (also referred to as `se
 1. **Answer the Three Fundamental Questions for Every `summarize_row_groups()` and `analyze()` Call**:
    - **Unit of Counting / Analysis**:
      - Unique subjects (`a_freq_j` with `.stats = "count_unique_fraction"` or `"count_unique_denom_fraction"`) vs. total events (`.stats = "count"`) vs. subject's worst toxicity/severity grade (`a_maxlev`) vs. person-years/EAIR (`a_patyrs_j`, `a_eair100_j`, `a_eair_strat_j`) vs. continuous/model summaries (`tern::a_summary`, `column_stats`, `a_summarize_aval_chg_diff_j`, `a_summarize_ancova_j`, `a_summarize_mmrm`, `a_lsmeans`).
+     - When the required output is a single-row unique-subject count (e.g., "Subjects with evaluable samples," "Number of subjects with ≥1 AE"), the canonical approach is `a_freq_j` with a **binary flag variable** as the analyzed variable (`.var`) and `val = "Y"` plus `label = "..."` in `extra_args`. Never pass a subject-identifier variable (e.g., `USUBJID`) as the **analyzed variable** (i.e., via the `vars` argument — the first argument — of `analyze("USUBJID", ...)`) — `a_freq_j` will enumerate every subject ID as a separate row. (Passing `USUBJID` as the `id` **parameter** via `extra_args` is correct and is in fact the default.) Derive the flag variable in data prep if one does not already exist.
    - **Denominator & Target (Sub)Population**:
      - Column arm population from `ADSL` (`denom = "n_altdf"` or `"N_col"` with `alt_counts_df = adsl`).
      - Subgroup-conditioned arm population (`denom = "n_altdf", denom_by = "<row_subgrp_var>"`).
@@ -145,15 +158,18 @@ First, consult **[select_afuns.md](./select_afuns.md)** (also referred to as `se
      - Does the layout have Risk/Mean Difference columns? Enable `riskdiff = TRUE` (or `comp_btw_group = TRUE`) and pass `ref_path`.
      - Is it a subgroup header row (`Gender: F   79   66   77`) above comparative detail rows? Use `cfun = a_freq_j` with `.stats = "n_altdf", denom = "n_altdf", denom_by = "SEX", riskdiff = FALSE` on the subgroup `summarize_row_groups()`, and `.stats = "count_unique_denom_fraction", denom = "n_altdf", denom_by = "SEX", riskdiff = TRUE, ref_path = ref_path` on the inner `summarize_row_groups()` and `analyze()`.
      - Are baseline visits or specific factor levels excluded from change-from-baseline or modeling? Use `exclude_visits`, `a_*_with_exclude(exclude_levels = ...)`, or `a_two_tier(drill_down_levs = ...)`.
+     - **Always explicitly record the conditionality assessment**, even when the answer is "none." For example: "No risk difference or comparison columns exist in this layout, so `tern::a_summary` (which lacks `riskdiff`/`ref_path` support) is safe to use without wrapping." This ensures the reasoning is auditable and flags the constraint if the table is later extended with comparison columns.
 2. **Configure Specific Requirements**:
    - Statistical test / CI method (`method = "wald"`, `"waldcc"`, `"cmh"`, Mantel-Fleiss `a_proportion_diff_mf`, `ancova = TRUE/FALSE`, etc.).
    - Dynamic decimal precision (`fmt_spec_var_d`, `fmt_spec_df_d`, `format_sigfig_j`, `formats_var = "fmt_d"`, `.formats = "default"`).
-3. **Escalation When No Suitable Existing `afun` / `cfun` Is Found $\longrightarrow$ Defer to [`custom_afuns.md`](./custom_afuns.md)**:
-   - If (and **only** if) the evaluation in [select_afuns.md](./select_afuns.md) determines that no existing `junco` or `tern` function can produce the required rows/cells via `extra_args`, escalate to **[custom_afuns.md](./custom_afuns.md)** and follow its strict reuse-first hierarchy:
+3. **Verify Record Granularity Before Relying on Row Counts as Subject Counts**:
+   When a `summarize_row_groups()` or `analyze()` call uses a row-counting mechanism (default `summarize_row_groups(format = "xx")`, `.stats = "n_df"`, or `nrow(df)`) as a proxy for unique-subject counts, **verify that the analysis dataset has exactly one row per subject within each `(row_facet, col_facet)` cell**. If the dataset can have multiple rows per subject (repeated measures, multiple events, multiple assessments), use a subject-deduplicating function instead (e.g., `a_freq_j` with `.stats = "count_unique"` on a flag variable, or `length(unique(df[["USUBJID"]]))` in a custom cfun). Never assume record granularity — confirm it via data exploration or dataset documentation.
+4. **Escalation When No Suitable Existing `afun` / `cfun` Is Found $\longrightarrow$ Defer to [`custom_afuns.md`](./custom_afuns.md)**:
+   - If (and **only** if) the evaluation in [select_afuns.md](./select_afuns.md) determines that no existing `junco` or `tern` function can produce the required rows/cells via `extra_args`, escalate to **[custom_afuns.md](./custom_afuns.md)** and follow its strict reuse-first hierarchy. When the orchestrator directs you to the escalation ladder in custom_afuns.md, treat Tier 1 as a **parameter space search**, not a single check. The most common premature-escalation pattern is: one parameterization of a correct function fails → the function is declared inadequate → a bespoke Tier 5 function is written. Before escalating, verify that you have searched the `.var`, `.stats`, `extra_args`, and data-prep dimensions (see custom_afuns.md Section 1.1). Record the Tier 1 search log in the implementation log before proceeding to Tier 2 or beyond.
      - **Tier 2 (Wrap with `make_afun`)**: Wrap an existing `s_*` or `a_*` function with `rtables::make_afun()` to lock in `.stats`, `.formats`, `.labels`, `.indent_mods`, `.ungroup_stats`, or curried default arguments.
      - **Tier 3 (Combine / Mutate `RowsVerticalSection`s)**: Write a thin wrapper that calls existing `afun`s and combines or modifies their returned `RowsVerticalSection` objects—either dispatching between two existing `afun`s across columns via `.spl_context`, stacking multiple existing `afun`s vertically via `c(rvs1, rvs2)`, or adjusting indentation/formats via `indent_mod(rvs) <- ...`.
      - **Tier 4 (Bridge Reference Group Paths)**: If an existing function expects `.ref_group` and `.in_ref_col` but the layout uses nested spanning headers (`ref_path`) or an Overall column, write a 3-line adapter calling `junco::get_ref_info(ref_path, .spl_context, .var)` and delegating to the existing function.
-     - **Tier 5 (Bespoke `in_rows()` Function)**: Author a fully custom `afun`/`cfun` from scratch **only** when Tiers 2–4 cannot express the calculation, ensuring every column returns the exact same number of rows (even when `nrow(df) == 0`) and uses `.N_col` / `.alt_df_full` rather than `.N_row` or `.N_total` for subject denominators.
+     - **Tier 5 (Bespoke `in_rows()` Function)**: Author a fully custom `afun`/`cfun` from scratch **only** when Tiers 2–4 cannot express the calculation, ensuring every column returns the exact same number of rows (even when `nrow(df) == 0`) and uses `.N_col` / `.alt_df_full` rather than `.N_row` or `.N_total` for subject denominators. Even when a bespoke `afun` is justified, externalize static row labels to the `analyze()` call via `var_labels` / `show_labels` rather than hardcoding them inside the function body. If the design calls for stacking multiple existing afuns with label rows between them, re-examine whether the structure should be expressed as separate `analyze()` calls in the layout instead (see custom_afuns.md Building Block 6). Reserve afun-internal labels for data-driven or multi-row cases where layout-level labeling cannot express the requirement.
 
 ---
 
@@ -182,6 +198,11 @@ tbl <- build_table(lyt, df = anl_df, alt_counts_df = adsl)
 ```
 
 Before executing `build_table()`, verify all **Six Cross-Dimension Integration Contracts** in Section 3 below.
+
+**Mandatory Contract Audit Log**: For each of the six contracts, explicitly record in the implementation log whether the contract applies and how it is satisfied (or why it does not apply). This ensures completeness, aids debugging, and makes the reasoning auditable. Example entries:
+- "Contract 1 (Dataset Sync): `ada_span` and `ada_col` created on `adsl_ada` first, then synchronized onto `anl` via `factor(..., levels = levels(adsl_ada$...))`. ✓"
+- "Contract 2 (ref_path): Not applicable — no comparison/difference columns in this table."
+- "Contract 3 (denom_by): Not applicable — no subgroup row splits conditioning denominators."
 
 ---
 

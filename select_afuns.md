@@ -63,6 +63,10 @@ Even a seemingly simple frequency count in an event dataset (such as `ADAE` or `
 > **Never Confuse Unique Patients with Total Events**
 > In repeated-measures or event-level datasets (`ADAE`, `ADCM`, `ADMH`), a format shell showing `xx (xx.x%)` almost always requires **unique subjects** (`count_unique_fraction`), whereas a row labeled `"Total number of events"` requires **event counts** (`count`). Check the shell's row labels and footnotes carefully.
 
+> [!WARNING]
+> **Never Assume Row Counts Equal Subject Counts**
+> In any dataset — not just event-level datasets like `ADAE` — a format shell showing `N` or `xx` as a count may require **unique subjects** rather than **total records**. Before using a row-counting mechanism (`summarize_row_groups(format = "xx")`, `.stats = "n_df"`, `nrow(df)`) as a subject count, verify that the dataset has exactly one row per subject within each relevant facet. Repeated-measures datasets (`ADLB`, `ADVS`, `ADEX`) can have multiple rows per subject per visit; visit-level datasets may have multiple assessments per visit. When in doubt, use a subject-deduplicating mechanism.
+
 ---
 
 ### 2.3 Fundamental Question 2: Denominators & Target (Sub)Populations
@@ -289,6 +293,10 @@ Once you have identified the correct `afun`/`cfun` from the decision matrix abov
 - **Column Restriction (`restr_columns`)**:
   - A KEEP list of leaf column labels: columns whose leaf label (case-insensitive match on `tail(.spl_context$cur_col_split_val, 1)`) is not in `restr_columns` are blanked out. Use when a single `analyze()` or `summarize_row_groups()` call should only populate a subset of columns (e.g., `restr_columns = c("N")` to populate only the `N` column in a shift table layout while blanking baseline-level and Total columns).
   - Distinct from `riskdiff`: `riskdiff` toggles behavior between arm columns and risk-difference columns; `restr_columns` restricts output to an arbitrary subset of leaf columns by name.
+> [!WARNING]
+> **`a_freq_j` Enumerates All Levels of `.var`**
+> `a_freq_j` always produces one row per level of the **analyzed variable** (`.var` — the variable named in `analyze(vars, ...)`) after applying `val`, `drop_levels`, `excl_levels`, and `new_levels` filtering. Passing a high-cardinality variable like `USUBJID` as `.var` (i.e., `analyze("USUBJID", afun = a_freq_j, ...)`) produces one row per subject — not a single summary count. (This is distinct from the `id` parameter, which controls internal subject deduplication and correctly defaults to `"USUBJID"`.) When a single-row unique-subject count is needed (e.g., "Subjects with evaluable samples," "Number of subjects with ≥1 AE"), always analyze a **binary flag variable** (e.g., `TRTEMFL`, `EVALFL`) as `.var` with `val = "Y"` and `label = "..."`. Derive the flag in data prep if it does not already exist in the dataset.
+
 - **Filtering, Level Manipulation & Relabeling**:
   - **⚠️ Data scope constraint for derived variables**: `a_freq_j` internally references `.df_row` (for level enumeration and row-facet denominators) and `.alt_df_full` (for `denom = "n_altdf"` subject counts). Any variable passed as `.var` — or referenced by `denom_by`, `val`, `excl_levels`, or `new_levels` — must exist in the dataset(s) passed to `build_table()`, not just in a `df` slice mutated inside a custom afun. Variables created via `mutate()` inside an afun exist only in the `df` column-slice; they are invisible to `.df_row`, `.alt_df_full`, `.spl_context$full_parent_df`, and all other data.frame special arguments. Always pre-compute derived variables (flags, recoded factors, computed numerics) in data prep on both `df` and `alt_counts_df` when needed. See Building Block 7 in `[custom_afuns.md](./custom_afuns.md)`.
   - Single-flag summary row: `analyze("TRTEMFL", afun = a_freq_j, extra_args = list(val = "Y", label = "Subjects with >=1 AE", ...))` tabulates only level `"Y"` and labels the row `"Subjects with >=1 AE"`.
@@ -611,8 +619,9 @@ tbl <- build_table(lyt, advs, alt_counts_df = adsl)
 
 ## 8. Diagnostic Checklist & Escalation Path
 
-Before finalizing your `afun`/`cfun` selection, verify all five items:
+Before finalizing your `afun`/`cfun` selection, verify all items:
 
+0. **If a selected function produced unexpected output**: This checklist also serves as a diagnostic tool. Before concluding the function cannot satisfy the requirement, re-examine the parameterization against items 1–5 below — the failure is more likely a parameterization error than a capability gap. The most common failure modes are: (a) wrong `.var` (e.g., high-cardinality identifier instead of binary flag — `a_freq_j` enumerates all levels of `.var`), (b) wrong `.stats` (e.g., `"count"` instead of `"count_unique_fraction"`), (c) missing `val`/`label` for single-row flag summaries, (d) wrong `denom`/`denom_by` producing incorrect percentages. Fix the parameterization and retry before escalating to `[custom_afuns.md](./custom_afuns.md)`.
 1. **Counting Unit Match**: Does the shell count unique patients (`count_unique_fraction`), total events (`count`), worst grade per patient (`a_maxlev`), or exposure time (`a_eair100_j` / `a_patyrs_j`)?
 2. **Denominator Match**: Is the percentage denominator the column arm total (`denom = "n_altdf"`), a row-subgroup-conditioned arm total (`denom = "n_altdf", denom_by = ...`), the cell sample size (`denom = "n_df"`), or the row total (`denom = "n_rowdf"`)? Is `alt_counts_df = adsl` passed to `build_table()`?
 3. **Column Conditionality Match**: If the layout has non-nested comparison columns or multi-variable sub-columns, does the selected `afun`/`cfun` accept `ref_path` / `riskdiff` / `comp_btw_group` / `multivars` / `colpaths` to populate each column branch appropriately? **All `tern` functions and `junco::a_maxlev` lack built-in difference column support.** If the layout includes difference columns, either select a `junco` function that supports `riskdiff`/`ref_path` (check the "Diff Col" column in Sections 3–4), or wrap the selected function using the column-dispatch (Pattern 2A) or `get_ref_info()` bridge (Tier 4) patterns from `[custom_afuns.md](./custom_afuns.md)`.
