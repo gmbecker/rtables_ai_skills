@@ -472,7 +472,7 @@ template_acfun <- function(df,               # Or `x` if only the single analyze
 | **Variable Name** | `.var` | `character(1)` | Name of the variable currently being analyzed in `analyze(vars = ...)`. |
 | **Marginal Counts** | `.N_col` | `integer(1)` | Column-wise $N$ for the current column. **Uses `alt_counts_df` (e.g., `ADSL`) when provided to `build_table()`!** |
 | **Marginal Counts** | `.all_col_counts` | `integer` vector | Named vector of column counts across *all* columns in the table (uses `alt_counts_df` when provided). |
-| **Marginal Counts** | `.N_row` | `integer(1)` | Row-wise observation count across all columns for the current row facet. **WARNING**: `.N_row` is **ALWAYS calculated from primary `df`**, NEVER from `alt_counts_df`! In an `ADAE` table with `alt_counts_df = adsl`, `.N_col` counts *patients* while `.N_row` counts *adverse event records*. |
+| **Marginal Counts** | `.N_row` | `integer(1)` | Row-wise observation count across all columns for the current row facet. **WARNING**: `.N_row` is **ALWAYS calculated from primary `df`**, NEVER from `alt_counts_df`! In an event-level table (e.g., `ADAE`) with a subject-count `alt_counts_df`, `.N_col` counts *subjects* while `.N_row` counts *event records*. |
 | **Marginal Counts** | `.N_total` | `integer(1)` | **DO NOT USE.** Naively sums `.all_col_counts`, which double-counts whenever a table has an Overall column, overlapping subgroups, or Risk Difference columns. Instead, use `NROW(.spl_context$full_parent_df[[1]])` (for primary `df`) or `NROW(.alt_df_full)` (for `alt_counts_df`). |
 | **Row Facet Data** | `.df_row` | `data.frame` | All observations in the current **row** facet across *all* columns (i.e., before column subsetting). Identical to `.spl_context$full_parent_df[[NROW(.spl_context)]]`. |
 | **Alt Counts Data** | `.alt_df` | `data.frame` | `alt_counts_df` subsetted by **both** current row splits and current column expression. *(Warning: Can be 0-row or fail if row-split variables like `AEBODSYS` do not exist in `alt_counts_df`!)* |
@@ -724,7 +724,7 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
    - Does every column branch in a column-conditional `afun` emit the exact same number of rows and identical `value_names()`?
    - Remember that the **left-most column** determines the stub labels (`value_labels()`), row formats, and `indent_mod()` for the entire row section.
 5. **Subject vs. Event Denominator Correctness**:
-   - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with `alt_counts_df = adsl`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
+   - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with a subject-count `alt_counts_df`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
 6. **Dual `afun`/`cfun` Compatibility**:
    - If the function is used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal parameter and assign `labelstr` to the returned row label?
 7. **No Precomputed Cell Values Via External State**:

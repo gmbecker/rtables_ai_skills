@@ -36,9 +36,28 @@ Every `rtables` layout (`PreDataTableLayouts`, initialized with `basic_table()`)
 
 ### 1.2 Why Incremental Translation Works: Structural Orthogonality
 In `rtables`:
-1. **Column splits and row splits are syntactically orthogonal**: You can build and test the entire column header structure (`build_table(lyt_cols, adsl)`) with zero row instructions, and you can build and test the entire row hierarchy (`build_table(lyt_rows, df)`) under a single default `all obs` column using dummy analysis functions (`dummy_one_row`, `dummy_n_rows_factory(k)`).
+1. **Column splits and row splits are syntactically orthogonal**: You can build and test the entire column header structure (`build_table(lyt_cols, alt_counts_df)`) with zero row instructions, and you can build and test the entire row hierarchy (`build_table(lyt_rows, df)`) under a single default `all obs` column using dummy analysis functions (`dummy_one_row`, `dummy_n_rows_factory(k)`).
 2. **Faceting handles data subsetting automatically**: Neither `afun` nor `cfun` needs to filter data for standard row or column categories; `rtables` automatically passes the intersection of the active row facet and column facet to `afun`/`cfun` (while also providing `.df_row`, `.alt_df`, `.alt_df_full`, `.N_col`, and `.spl_context` when wider context is needed).
 3. **Where dimensions interact**: When column or row structures are *heterogeneous* or *population-conditioned* (e.g., Risk Difference columns alongside Treatment Arm columns, 3-column `[n/N, Mean, CFB]` layouts, or subgroup row splits requiring subgroup-specific denominators), the column/row layout and the selected `afun`/`cfun` must share specific configuration contracts (covered in Section 4).
+
+### 1.3 The Data-Duplication Prohibition (Absolute Invariant)
+
+> [!CAUTION]
+> **Data-Duplication Facet Fabrication Anti-Pattern (PROHIBITED)**
+>
+> **Never duplicate, copy, or stack rows of a dataset to manufacture synthetic column or row splitting variables.** The prohibited operation is: taking existing records, copying them (once or multiple times) with different values of a new synthetic factor variable, and then splitting on that variable — regardless of the mechanism used to perform the copying (e.g., `dplyr::bind_rows()`, `rbind()`, `data.table::rbindlist()`, manual `data.frame()` construction, `tidyr::uncount()`, subsetting-and-reassigning, or any other approach that increases `nrow()` of `df` or `alt_counts_df` beyond their pre-duplication row counts). This includes:
+> - Duplicating the subject-count dataset (`alt_counts_df`) or the main analysis dataset (`df`) with different values of a synthetic variable (e.g., `AE_CAT = "All AEs"` / `AE_CAT = "Drug-Related AEs"`) and then splitting on that variable.
+> - Creating `COL_SPAN` / `COL_GRP` / `TRT_COL` or similar synthetic factor columns by stacking copies of the data and then using `split_cols_by("COL_SPAN", split_fun = trim_levels_in_group("COL_GRP")) |> split_cols_by("COL_GRP")`.
+> - Pivoting analysis data into long format with a synthetic `STAT_TYPE` column to bypass `split_cols_by_multivar()` or `.spl_context`-based column dispatch.
+>
+> **Why this is always wrong**: `rtables` is a *declarative faceting engine*. Every column topology — overlapping subsets, totals inside or outside spans, asymmetric inner columns, parallel banners, non-mutually-exclusive cohorts, multi-variable sub-columns — has a corresponding layout-level mechanism (`add_overall_col`, `add_overall_level`, `add_combo_levels`, `some_v_all_col_struct`, `grouped_cols_w_diffs`, `grouped_cols_w_subgrps`, `split_cols_by_multivar`, `make_split_fun`, `nested = FALSE`). Similarly, every row topology with overlapping or total facets has a row split function solution (`add_overall_level`, `add_combo_levels`, `make_combo_splitfun`, `make_split_fun`; see [row_struct_layout.md](./row_struct_layout.md) Section 5). Data duplication:
+> 1. **Inflates `alt_counts_df`**, corrupting column header `(N=xx)` counts and all `denom = "n_altdf"` percentage denominators (unless the duplication factor is manually corrected, which is fragile and error-prone).
+> 2. **Breaks subject-level counting invariants**: `a_freq_j` with `.stats = "count_unique_fraction"` deduplicates by `USUBJID`, but the denominator `N` from `alt_counts_df` is inflated by the duplication factor, producing silently wrong percentages.
+> 3. **Defeats `rtables`' structural guarantees**: Column subsetting expressions, `.spl_context$cur_col_expr`, `.alt_df_full`, and `.df_row` all operate on the duplicated data, making `.spl_context`-based logic unreliable.
+>
+> **The diagnostic test**: If `nrow(df_for_build) > nrow(source_df_after_filtering)` or `nrow(alt_counts_df_for_build) > n_distinct(alt_counts_df_for_build$USUBJID)`, the data has been duplicated. Return to [col_struct_layout.md](./col_struct_layout.md) Section 2.1 (Decision Matrix) or [row_struct_layout.md](./row_struct_layout.md) Section 5.1 and find the layout-level solution. If the topology does not appear in either decision matrix, escalate to custom split function engineering — still without duplicating data.
+>
+> **Permitted data stacking**: Stacking genuinely distinct source datasets (e.g., combining `ADAE` records from two studies into a pooled analysis dataset) is fine — the prohibition applies only to duplicating the *same* records with different synthetic factor values to simulate column or row facets.
 
 ---
 
@@ -49,11 +68,11 @@ Always follow this 5-stage workflow when programming a table from a shell or spe
 ```mermaid
 flowchart TD
     S1["Stage 1: Decompose Shell & Audit Datasets<br/>(Identify df, alt_counts_df, Header, Row Tree, Cell Specs)"]
-    S2["Stage 2: Program Column Structure<br/>(Defer to col_struct_layout.md)<br/>Verify header with build_table(lyt_cols, adsl)"]
+    S2["Stage 2: Program Column Structure<br/>(Defer to col_struct_layout.md)<br/>Verify header with build_table(lyt_cols, alt_counts_df)"]
     S3["Stage 3: Program Row Faceting Skeleton<br/>(Defer to row_struct_layout.md)<br/>Verify row tree with dummy_one_row / dummy_n_rows_factory"]
     S4["Stage 4: Evaluate & Select Existing cfun / afun + extra_args<br/>(Defer to select_afuns.md)<br/>Match counting unit, denominator, conditionality & precision"]
     S4_ESC["Stage 4 Escalation: Extend, Combine, or Construct Custom afun / cfun<br/>(Defer to custom_afuns.md)<br/>Prioritize make_afun, c(rvs1, rvs2), & get_ref_info over bespoke code"]
-    S5["Stage 5: Integrate, Synchronize Contracts & Materialize<br/>(Combine lyt_cols + lyt_rows + afuns/cfuns)<br/>Run build_table(lyt, df, alt_counts_df = adsl)"]
+    S5["Stage 5: Integrate, Synchronize Contracts & Materialize<br/>(Combine lyt_cols + lyt_rows + afuns/cfuns)<br/>Run build_table(lyt, df, alt_counts_df)"]
 
     S1 --> S2 --> S3 --> S4
     S4 -- "Existing afun/cfun found" --> S5
@@ -69,7 +88,7 @@ Before writing layout code, inspect the shell and answer four questions:
 
 1. **What are the input datasets (`df` vs. `alt_counts_df`)?**
    - **Subject-level table** (Demographics, Disposition, Baseline Characteristics): `df` is `adsl`. Usually `alt_counts_df` is not needed (or `alt_counts_df = adsl` if `df` is pre-filtered).
-   - **Event-level or repeated-measures table** (Adverse Events `adae`, Concomitant Meds `adcm`, Labs `adlb`, Vital Signs `advs`, Exposure `adex`): `df` is the event/visit dataset, and **`alt_counts_df = adsl` is mandatory** so column header counts `(N=xx)` and subject-level percentage denominators reflect the full treated/safety population rather than only patients with events.
+   - **Event-level or repeated-measures table** (Adverse Events `adae`, Concomitant Meds `adcm`, Labs `adlb`, Vital Signs `advs`, Exposure `adex`): `df` is the event/visit dataset, and **`alt_counts_df = adsl` is mandatory** so column header counts `(N=xx)` and subject-level percentage denominators reflect the full treated/safety population rather than only subjects with events.
 2. **What is the Column Header Topology?**
    - Classify the topology: asymmetric hierarchy (parent-dependent children), symmetric hierarchy (uniform children), sibling non-nested branches, multi-variable sub-columns, or cross-tabulation.
    - Identify spanning headers, leaf-level grouping variables, virtual combination levels (e.g., `"All Active"`), and non-nested comparison branches (e.g., `"Risk Difference (%) (95% CI)"`).
@@ -104,9 +123,9 @@ Consult **[col_struct_layout.md](./col_struct_layout.md)** to implement the colu
    - **Verify `colcount_format`**: `basic_table()` defaults to `colcount_format = "(N=xx)"`, whereas most clinical shells display `N=XXX` without parentheses (`colcount_format = "N=xx"`). Check the shell header and set `show_colcounts = TRUE` and `colcount_format` either globally in `basic_table()` or selectively on the primary arm `split_cols_by()` call (so comparison/risk-difference columns do not display unwanted `(N=xx)` headers unless the shell shows them).
    - **Ordered factor for blank spanning labels**: Always create spanning variables via `create_colspan_var()` (or explicit `factor(..., levels = c(active_lbl, " "))`)—never raw `ifelse()`. In character vectors, `" "` sorts before `"A"` in ASCII and silently places Placebo to the left of Active Treatment.
 3. **Isolated Verification**:
-   - Test `build_table(lyt_cols, adsl)` by itself to confirm the exact header banner and column counts before adding row instructions.
+   - Test `build_table(lyt_cols, alt_counts_df)` by itself to confirm the exact header banner and column counts before adding row instructions.
 4. **Outputs to Record for Stages 4 & 5**:
-   - Any derived columns added to `adsl` (`colspan_trt`, `rrisk_header`, `rrisk_label`) — **these must also be joined onto `df`**.
+   - Any derived columns added to `alt_counts_df` (`colspan_trt`, `rrisk_header`, `rrisk_label`) — **these must also be joined onto `df`**.
    - The reference group column path **`ref_path`** (e.g., `c("colspan_trt", " ", "TRT01A", "Placebo")` or `c("ARM", "B: Placebo")`).
    - Any multi-variable column vector **`multivars`** (e.g., `c("AVAL", "AVAL", "CHG")`).
 
@@ -153,7 +172,7 @@ First, consult **[select_afuns.md](./select_afuns.md)** (also referred to as `se
      - Unique subjects (`a_freq_j` with `.stats = "count_unique_fraction"` or `"count_unique_denom_fraction"`) vs. total events (`.stats = "count"`) vs. subject's worst toxicity/severity grade (`a_maxlev`) vs. person-years/EAIR (`a_patyrs_j`, `a_eair100_j`, `a_eair_strat_j`) vs. continuous/model summaries (`tern::a_summary`, `column_stats`, `a_summarize_aval_chg_diff_j`, `a_summarize_ancova_j`, `a_summarize_mmrm`, `a_lsmeans`).
      - When the required output is a single-row unique-subject count (e.g., "Subjects with evaluable samples," "Number of subjects with ≥1 AE"), the canonical approach is `a_freq_j` with a **binary flag variable** as the analyzed variable (`.var`) and `val = "Y"` plus `label = "..."` in `extra_args`. Never pass a subject-identifier variable (e.g., `USUBJID`) as the **analyzed variable** (i.e., via the `vars` argument — the first argument — of `analyze("USUBJID", ...)`) — `a_freq_j` will enumerate every subject ID as a separate row. (Passing `USUBJID` as the `id` **parameter** via `extra_args` is correct and is in fact the default.) Derive the flag variable in data prep if one does not already exist.
    - **Denominator & Target (Sub)Population**:
-     - Column arm population from `ADSL` (`denom = "n_altdf"` or `"N_col"` with `alt_counts_df = adsl`).
+     - Column arm population from the subject-count dataset (`denom = "n_altdf"` or `"N_col"` with `alt_counts_df` passed to `build_table()`).
      - Subgroup-conditioned arm population (`denom = "n_altdf", denom_by = "<row_subgrp_var>"`).
      - Within-cell record count (`denom = "n_df"`), row total (`denom = "n_rowdf"`), or parent facet total (`denom = "n_parentdf"`).
    - **Column, Row, or Dual Conditionality**:
@@ -199,12 +218,13 @@ lyt <- basic_table(
 tbl <- build_table(lyt, df = anl_df, alt_counts_df = adsl)
 ```
 
-Before executing `build_table()`, verify all **Six Cross-Dimension Integration Contracts** in Section 3 below.
+Before executing `build_table()`, verify all **Seven Cross-Dimension Integration Contracts** in Section 3 below.
 
-**Mandatory Contract Audit Log**: For each of the six contracts, explicitly record in the implementation log whether the contract applies and how it is satisfied (or why it does not apply). This ensures completeness, aids debugging, and makes the reasoning auditable. Example entries:
+**Mandatory Contract Audit Log**: For each of the seven contracts, explicitly record in the implementation log whether the contract applies and how it is satisfied (or why it does not apply). This ensures completeness, aids debugging, and makes the reasoning auditable. Example entries:
 - "Contract 1 (Dataset Sync): `ada_span` and `ada_col` created on `adsl_ada` first, then synchronized onto `anl` via `factor(..., levels = levels(adsl_ada$...))`. ✓"
 - "Contract 2 (ref_path): Not applicable — no comparison/difference columns in this table."
 - "Contract 3 (denom_by): Not applicable — no subgroup row splits conditioning denominators."
+- "Contract 6 (No Duplication): `nrow(alt_counts_df) == n_distinct(alt_counts_df$USUBJID)` verified (182 == 182). ✓"
 
 ---
 
@@ -232,7 +252,7 @@ tbl <- build_table(lyt, df, alt_counts_df = adsl) |>
 
 ## 3. Cross-Dimension Integration Contracts
 
-When combining column layouts, row layouts, and analysis functions, the following six contracts must hold:
+When combining column layouts, row layouts, and analysis functions, the following seven contracts must hold:
 
 ### Contract 1: Dataset Synchronization Between `df` and `alt_counts_df`
 - Every variable referenced in **any** `split_cols_by*()` call (including helper spanning variables like `colspan_trt`, `rrisk_header`, `rrisk_label`) **must exist on both `df` and `alt_counts_df`** with identical factor levels in the same order.
@@ -260,7 +280,7 @@ When combining column layouts, row layouts, and analysis functions, the followin
 
 ### Contract 3: Subgroup Row Splits + `denom_by` Conditioning
 - Whenever row faceting splits the table by a demographic/baseline subgroup variable (e.g., `split_rows_by("SEX")` or `split_rows_by("AGEGR1")`) and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
-  1. Pass `alt_counts_df = adsl` to `build_table()`.
+  1. Pass the subject-count dataset as `alt_counts_df` to `build_table()`.
   2. Set `denom = "n_altdf"` and `denom_by = "SEX"` (matching the outer `split_rows_by` variable name) inside `extra_args` of all nested `summarize_row_groups()` and `analyze()` calls.
   3. Typically use `.stats = "count_unique_denom_fraction"` (`xx / xx (xx.x%)`) in the subgroup body rows because the subgroup denominator `N` differs from the column header `(N=xx)`.
 
@@ -276,7 +296,22 @@ When columns represent multiple variables or statistics rather than pure subpopu
 - Each `split_rows_by(..., split_label = "...", label_pos = "topleft")` adds one line to the top-left corner area, automatically indented by $2 \times (\text{nesting depth} - 1)$ spaces.
 - Because `analyze()` does not support `label_pos = "topleft"`, if the shell shows a label for the leaf analysis level in the top-left corner (e.g., `"  Preferred Term, n (%)"` under `"System Organ Class"`), add it explicitly via `append_topleft("  Preferred Term, n (%)")` with $2 \times (\text{number of parent topleft splits})$ leading spaces.
 
-### Contract 6: Mixed Nesting Levels (Selective Drill-Down Trade-Off)
+### Contract 6: No Data Duplication (Row-Count Preservation Invariant)
+- The datasets passed to `build_table(lyt, df, alt_counts_df = ...)` must have the **same number of rows** as the source datasets after filtering and joining. Specifically:
+  - `nrow(alt_counts_df_for_build)` must equal the number of unique subjects in the target population (i.e., one row per subject after population filtering).
+  - `nrow(df_for_build)` must equal the number of records in the source analysis dataset after filtering and joining.
+- **Mandatory verification assertion**: Before calling `build_table()`, include:
+  ```r
+  stopifnot(
+    "alt_counts_df has been duplicated — use layout-level column/row structure instead of data duplication" =
+      nrow(alt_counts_df_for_build) == dplyr::n_distinct(alt_counts_df_for_build$USUBJID)
+  )
+  ```
+  For event-level datasets where multiple rows per subject are expected, verify that the row count matches the source: `stopifnot(nrow(df_for_build) == nrow(source_df_after_filter))`.
+- **If this assertion fails**, the data preparation duplicates rows to simulate virtual facets. Return to Section 1.3 (Data-Duplication Prohibition) and [col_struct_layout.md](./col_struct_layout.md) Section 2.1 or [row_struct_layout.md](./row_struct_layout.md) Section 5.1 to find the layout-level solution.
+- **Mandatory Contract Audit Log entry**: "Contract 6 (No Duplication): `nrow(alt_counts_df) == n_distinct(alt_counts_df$USUBJID)` verified as `TRUE` (182 == 182). `nrow(df_for_build) == nrow(source_df_after_filter)` verified as `TRUE` (1191 == 1191). ✓"
+
+### Contract 7: Mixed Nesting Levels (Selective Drill-Down Trade-Off)
 - When a shell displays all levels of a factor at the same indentation level (e.g., `COMPLETED`, `DISCONTINUED`, `ONGOING` from `EOSSTT`), and **only one level** (`DISCONTINUED`) expands into indented child rows (`DCSREAS`):
   - **Preferred Production Pattern**: Do **not** add a second `split_rows_by("DCSREAS")`. Instead, terminate after the outer split (if any) with a single `analyze("EOSSTT", afun = junco::a_two_tier, extra_args = list(inner_var = "DCSREAS", drill_down_levs = "DISCONTINUED", ...))`.
   - **Custom `afun` Escalation Pattern ([`custom_afuns.md`](./custom_afuns.md))**: If `junco::a_two_tier` cannot accommodate a specialized inner analysis function, escalate to [custom_afuns.md](./custom_afuns.md) (Section 3.5, Pattern 2D) to conditionally stack the existing primary and detail `afun`s using `indent_mod(det_rvs) <- 1L` and `c()`.
@@ -591,8 +626,9 @@ Before delivering any `rtables` + `junco` table implementation, verify all 10 it
    - Does the `afun`/`cfun` handle all column-conditional and row-conditional facets (risk differences, baseline visit exclusions, selective drill-downs)?
    - If no existing `afun`/`cfun` fit and you escalated to [`custom_afuns.md`](./custom_afuns.md), did you prioritize reusing/extending existing functions (`make_afun()`, `c(rvs1, rvs2)`, `junco::get_ref_info()`) over bespoke code, and does the custom function return identical row counts and row names across all columns (including 0-row facets)?
 5. **Dataset Synchronization (`df` vs. `alt_counts_df`)**:
-   - Is `alt_counts_df = adsl` passed to `build_table()` for all event/repeated-measures tables?
+   - Is the subject-count dataset passed as `alt_counts_df` to `build_table()` for all event/repeated-measures tables?
    - Do all column-split variables and `denom_by` variables exist with identical factor levels on both `df` and `alt_counts_df`?
+   - **No Data Duplication (Contract 6)**: Does `nrow(alt_counts_df_for_build) == n_distinct(alt_counts_df_for_build$USUBJID)`? Does `nrow(df_for_build)` match the source dataset row count after filtering and joining? If either check fails, the data preparation contains prohibited row duplication — return to Section 1.3 and [col_struct_layout.md](./col_struct_layout.md) Section 2.1 or [row_struct_layout.md](./row_struct_layout.md) Section 5.1.
 6. **Reference Path (`ref_path`) Consistency**:
    - Is the column structure built with `grouped_cols_w_diffs()` or another auto-injecting function? If so, `ref_path` must NOT appear in `extra_args` on any downstream `analyze()` or `summarize_row_groups()` call. For custom afuns that need `ref_path` in treatment columns, use the closure-capture pattern (see `[custom_afuns.md](./custom_afuns.md)` Tier 4).
    - If using manual `split_cols_by()` comparison branches, does `ref_path` in `extra_args` match the exact alternating `c(split_var, split_val, ...)` path to the control column in the column layout?

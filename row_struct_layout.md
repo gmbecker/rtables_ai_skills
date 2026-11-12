@@ -298,6 +298,11 @@ By default, sequential `split_rows_by()` calls create a **full-factorial cross-p
 
 ### 5.1 Built-In Row Split Functions Reference
 
+> [!CAUTION]
+> **RULE: IF your row structure implementation increases `nrow()` of `df` beyond its pre-duplication row count, THEN the implementation is wrong.**
+> No row topology requires duplicating, copying, or stacking rows — regardless of mechanism.
+> **Action**: Use `add_overall_level()`, `add_combo_levels()`, `make_combo_splitfun()`, or a `make_split_fun()` composition from the table below and Section 5.4. See `[rtables_junco_table_prog.md](./rtables_junco_table_prog.md)` Section 1.3 for the full prohibition rationale.
+
 | Split Function | Category | Behavior & When to Use |
 | :--- | :--- | :--- |
 | **`drop_split_levels`** | Empirical Exclusion | Drops factor levels that have **zero observations in the incoming parent facet's data**. |
@@ -521,4 +526,6 @@ Use this lookup table to map any desired visual row structure to its canonical `
    - If you analyze or split on the same variable more than once at the same nesting level (e.g., `analyze("AGE") |> insert_blank_line() |> analyze("AGE")`), always supply distinct `table_names = "AGE_2"` so row paths remain unique and addressable.
 8. **`page_by` Placement Constraints**:
    - A `page_by = TRUE` split must be the outermost row split with no top-level siblings. It cannot be nested inside a non-`page_by` split, and it cannot be the target of `at_sibling`. Only `split_rows_by()` supports `page_by`; the other `split_rows_by_*` variants do not. Remember that `page_by` only takes effect during pagination (`paginate_table()`, `export_as_txt()`, `export_as_pdf()`); without pagination (`print(tbl)`, `toString(tbl)`) the split renders as an ordinary row split.
+9. **No Data Duplication for Row Combination/Total Facets (Row-Count Preservation Invariant)**:
+   - **RULE**: If `nrow(df_for_build) > nrow(source_df_after_filter)`, the data has been duplicated and the implementation is **wrong**. Use `add_overall_level()`, `add_combo_levels()`, `make_combo_splitfun()`, or `make_split_fun()` compositions instead (Section 5.1, 5.4). No row topology requires data duplication. Verify with: `stopifnot(nrow(df_used) == nrow(df_original))` before `build_table()`.
 

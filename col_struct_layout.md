@@ -34,6 +34,11 @@ In `rtables`, a table layout (`PreDataTableLayouts`) is a declarative tree of sp
 
 Complete Visual Topology to Implementation Strategy Workflow:
 
+> [!CAUTION]
+> **RULE: IF your column structure implementation increases `nrow()` of either `df` or `alt_counts_df` beyond their pre-duplication row counts, THEN the implementation is wrong.**
+> No column topology requires duplicating, copying, or stacking rows — regardless of mechanism (`bind_rows()`, `rbind()`, `rbindlist()`, manual `data.frame()` construction, or anything else).
+> **Action**: Return to Step 1 below and re-classify the topology. Every column topology has a layout-level solution in the decision matrix (Section 2.1) or in Sections 3–6. See `[rtables_junco_table_prog.md](./rtables_junco_table_prog.md)` Section 1.3 for the full prohibition rationale.
+
 1. **Initial Lookup In Decision Matrix (2.1)**: Attempt to match the full header topology against the lookup matrix; if successful, immediately follow the implementation guidance.
 2. **Infer Column Structure From Visual And Semantic Clues (2.2)**: When a header does not directly match a single entry in 2.1, strip away top-left stub labels and use spanning alignment, repetition of sub-headers, and semantic relationships between adjacent columns to decompose the header into its underlying column tree or constituent sub-structures.
 3. **Second-Pass Lookup In Decision Matrix (2.1)**: Match the normalized structure (or each decomposed sub-branch inferred in Step 2) against the API decision matrix; if successful, immediately follow and combine the implementation guidance.
@@ -65,6 +70,11 @@ Use this lookup table to map a target visual header structure to the recommended
 | **Top-$k$ Frequent Levels + Pooled "Other" Column** | `make_split_fun(post = list(top_k_plus_other_post))` | — |
 
 When no suitable match is found, escalate to semantic decoding of the specific desired topology.
+
+> [!CAUTION]
+> **RULE: If `nrow()` increased, the implementation is wrong.**
+> A common incorrect approach for the topologies above: duplicate `alt_counts_df` and `df` with different values of a synthetic factor (e.g., `COL_SPAN`/`COL_GRP`), then `split_cols_by("COL_SPAN", split_fun = trim_levels_in_group("COL_GRP")) |> split_cols_by("COL_GRP")`. This inflates `alt_counts_df` row counts, corrupts `(N=xx)` denominators, and silently produces wrong percentages.
+> **Action**: Use the layout-level solution listed for each topology in the table above. See `[rtables_junco_table_prog.md](./rtables_junco_table_prog.md)` Section 1.3 for the full prohibition.
 
 ### 2.2 Inferring Column Structure Via Semantic Decoding of Visual Topology
 
@@ -141,7 +151,7 @@ Implementation Guidance: Because the child columns under `Risk Differences` do n
 - groups/cohorts to be compared (as when splitting on treatment arm), or
 - complementary measures to be considered together (as with a `Mean`, `SD` pair of columns).
 
-For example, `All Active` is semantically parallel to individual treatment arms (a cohort of patients analyzed alongside the individual arms):
+For example, `All Active` is semantically parallel to individual treatment arms (a cohort of subjects analyzed alongside the individual arms):
 
 ```text
    A: Drug X   B: Placebo   C: Combination   All Active
@@ -503,7 +513,7 @@ basic_table(show_colcounts = TRUE) |>
 
 ### 7.1 Controlling Column Count Denominators at Build Time
 1. **Default (`df` counts)**: `build_table(lyt, df)` counts rows of `df` in each column facet.
-2. **Subject-level population dataset (`alt_counts_df`)**: When `df` is an event-level or repeated-measures dataset (`ADAE`, `ADLB`, `ADVS`), pass `alt_counts_df = adsl` so header counts reflect subjects in `adsl`. Every column split variable must exist in `alt_counts_df`. Only use when counts calculated on the primary df would be incorrect; otherwise omit the `alt_counts_df` argument (rtables >= 0.6.17) or explicitly pass df to it again (rtables < 0.6.17).
+2. **Subject-level population dataset (`alt_counts_df`)**: When `df` is an event-level or repeated-measures dataset (`ADAE`, `ADLB`, `ADVS`), pass the subject-count dataset as `alt_counts_df` so header counts reflect the subject population. Every column split variable must exist in `alt_counts_df`. Only use when counts calculated on the primary df would be incorrect; otherwise omit the `alt_counts_df` argument (rtables >= 0.6.17) or explicitly pass df to it again (rtables < 0.6.17).
 3. **Manual vector override (`col_counts`)**: Pass `col_counts = c(100L, 105L, ...)` to `build_table(...)`.
 
 ### 7.2 Post-Build Mutation on `tbl`
@@ -569,3 +579,5 @@ Post-processing split function factory for multi-variable layouts (`split_cols_b
    - `grouped_cols_w_diffs()` auto-injects `ref_path` into comparison column `extra_args`. If `ref_path` is also passed in `extra_args` on downstream `analyze()` or `summarize_row_groups()` calls, comparison columns receive `ref_path` twice, causing `"formal argument ref_path matched by multiple actual arguments"`. When using `grouped_cols_w_diffs()`, never pass `ref_path` in `extra_args`; for custom afuns that need it in treatment columns, use the closure-capture pattern from `[custom_afuns.md](./custom_afuns.md)` Tier 3.
 5. **Sibling Header Visibility**:
    - When modifying column count visibility via `facet_colcounts_visible(tbl, path) <- TRUE`, pass the path pointing to the parent split level, not a single leaf.
+6. **Data-Duplication Facet Fabrication (PROHIBITED)**:
+   - **RULE**: If `nrow(alt_counts_df_for_build) > n_distinct(alt_counts_df_for_build$USUBJID)` or `nrow(df_for_build) > nrow(source_df_after_filter_and_join)`, the data has been duplicated and the implementation is **wrong**. Return to Section 2.1 Decision Matrix and use the layout-level solution. No column topology requires data duplication.
