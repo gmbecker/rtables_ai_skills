@@ -99,8 +99,10 @@ Consult **[col_struct_layout.md](./col_struct_layout.md)** to implement the colu
    - **Pure `rtables` fallback or standard layouts**: `split_cols_by*()`, `add_overall_col()`, `add_combo_levels()`, `trim_levels_to_map()`.
 
    > **Note on junco column generators**: `grouped_cols_w_diffs`, `grouped_cols_w_subgrps`, `shift_tbl_col_struct`, and `some_v_all_col_struct` implement **fixed hierarchical column topologies**, not treatment-arm-specific logic. Their argument names (`trtvar`, `colspan_trt_map`) reflect the most common use case, but the functions operate on arbitrary factor variables. A `grouped_cols_w_subgrps(trtvar = "ADA_STATUS", subgrp_var = "TITER_BUCKET")` call is perfectly valid.
-2. **Configure Column Counts (`(N=xx)`)**:
-   - Set `show_colcounts = TRUE` and `colcount_format = "N=xx"` (or `"(N=xx)"`) either globally in `basic_table()` or selectively on the primary arm `split_cols_by()` call (so comparison/risk-difference columns do not display nonsensical `(N=xx)` headers).
+2. **Configure Column Counts (`N=xx` vs. `(N=xx)`) & Match Exact Shell Columns**:
+   - **No unrequested columns**: Match the exact leaf columns and column hierarchy shown in the shell header—never add an unrequested column or omit a requested one.
+   - **Verify `colcount_format`**: `basic_table()` defaults to `colcount_format = "(N=xx)"`, whereas most clinical shells display `N=XXX` without parentheses (`colcount_format = "N=xx"`). Check the shell header and set `show_colcounts = TRUE` and `colcount_format` either globally in `basic_table()` or selectively on the primary arm `split_cols_by()` call (so comparison/risk-difference columns do not display unwanted `(N=xx)` headers unless the shell shows them).
+   - **Ordered factor for blank spanning labels**: Always create spanning variables via `create_colspan_var()` (or explicit `factor(..., levels = c(active_lbl, " "))`)—never raw `ifelse()`. In character vectors, `" "` sorts before `"A"` in ASCII and silently places Placebo to the left of Active Treatment.
 3. **Isolated Verification**:
    - Test `build_table(lyt_cols, adsl)` by itself to confirm the exact header banner and column counts before adding row instructions.
 4. **Outputs to Record for Stages 4 & 5**:
@@ -241,7 +243,7 @@ When combining column layouts, row layouts, and analysis functions, the followin
   adsl <- adsl |> filter(...) |> mutate(TRT01A = factor(TRT01A))
   adae <- adae |> mutate(TRT01A = factor(TRT01A, levels = levels(adsl$TRT01A)))
   ```
-  `create_colspan_var()` / `create_colspan_map()` and `grouped_cols_w_diffs()` require factor input with matching levels; character or mismatched-level variables cause `"All facets matched removal criteria"` or `create_colspan_map` errors.
+  `create_colspan_var()` / `create_colspan_map()` and `grouped_cols_w_diffs()` require factor input with matching levels. **Never create a spanning variable with raw `ifelse(..., " ", "Active ...")` without wrapping it in `factor(..., levels = c(active_lbl, " "))`**: `create_colspan_map()` does not error on character input—instead, ASCII ordering sorts `" "` (32) before `"A"` (65), silently placing Placebo to the *left* of Active Treatment. Always use `create_colspan_var()` on `adsl` first, and synchronize onto `df` via `factor(..., levels = levels(adsl$...))` rather than independent `droplevels()` (which can drop unobserved arm levels in pre-filtered event datasets). Character or mismatched-level variables cause silent column reordering, `"All facets matched removal criteria"`, or `create_colspan_map` errors.
 
 ### Contract 2: Reference Path (`ref_path`) Alignment Between Column Layout and `afun`/`cfun`
 - Any comparative `junco` function (`a_freq_j(..., riskdiff = TRUE)`, `a_eair100_j(..., riskdiff = TRUE)`, `a_diff_means()`, `a_summarize_ex_j(..., comp_btw_group = TRUE)`, `a_summarize_aval_chg_diff_j()`, `a_summarize_ancova_j()`, `a_lsmeans()`, `a_proportion_diff_j()`, `a_odds_ratio_j()`, `a_relative_risk()`, `a_cmhrms_j()`, `a_patyrs_j()`) requires `ref_path` to point to the exact column tree path of the control/reference group:
@@ -570,10 +572,10 @@ When adapting an existing template layout script rather than starting from scrat
 
 ## 6. Master End-to-End Verification Checklist
 
-Before delivering any `rtables` + `junco` table implementation, verify all 9 items:
+Before delivering any `rtables` + `junco` table implementation, verify all 10 items:
 
 1. **Column Structure Verified ([`col_struct_layout.md`](./col_struct_layout.md))**:
-   - Does the column header hierarchy, spanning label alignment, and `(N=xx)` visibility match the shell?
+   - Does the column header hierarchy, leaf column set (no unrequested `Total` or extra treatment splits), spanning label order/alignment, and `N=xx` vs. `(N=xx)` format & visibility match the shell?
    - Are unobserved factor levels kept or dropped as intended?
 2. **Row Faceting Structure Verified ([`row_struct_layout.md`](./row_struct_layout.md))**:
    - Does every `split_rows_by*()` branch terminate in at least one `analyze()` call?
@@ -603,4 +605,7 @@ Before delivering any `rtables` + `junco` table implementation, verify all 9 ite
    - Do the sort paths match the actual table structure (verify with `table_structure()` or `row_paths_summary()`)?
    - Does the score function match the type of children at the sort path (content-row-based for subtables with `summarize_row_groups()`, `row_values`-based for `DataRow`s from `analyze()`)?
    - For spanning column layouts, does the score function target the correct column(s) rather than inadvertently including risk difference columns?
+10. **Shell-Fidelity Parity Check (Rows, Titles, Footers)**:
+   - Compare rendered output line-by-line against the target shell: are all `title` / `subtitles` and `main_footer` (`Note:` blocks at the bottom of the shell) included?
+   - Are all required rows present in the exact order and indentation requested (including `.indent_mods` for nested summary statistics such as `95% CI` / `p-value` under contrast headers)?
 

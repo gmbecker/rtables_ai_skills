@@ -911,7 +911,412 @@ The model has been trained (via row_struct_layout.md Section 5.2) to be WARY of 
 
 ---
 
-## Updated Coverage Matrix (T21–T27)
+## Shell T28: Multi-Row-Generating `cfun` at the SOC Level (`child_labels = "visible"`, Doubly-Indented Leaf PTs, and Custom Content-Row Sorting)
+
+### Structural Notes (from shell spec)
+- 2-level hierarchy: `AEBODSYS` (SOC) → `AEDECOD` (PT) on `adae` (`SAFFL == "Y"`, `TRTEMFL == "Y"`, restricted to `Cardiac disorders` and `Eye disorders`) with `alt_counts_df = adsl`.
+- Each SOC displays its own visible facet label (`Cardiac disorders`, `Eye disorders`), immediately followed by a **2-row group summary (`cfun`)**:
+  1. `Subjects with >=1 TEAE` — unique subjects `xx (xx.x%)` (`count_unique_fraction`).
+  2. `Total number of TEAEs` — total event count `xx` (`count`).
+- Preferred terms are doubly indented (`indent_mod = 1L`) beneath the 2-row SOC summary.
+- Top-left corner has 3 hierarchical lines (`System Organ Class`, `  SOC Summary`, `    Preferred Term`) via `append_topleft()`.
+- Both SOCs and PTs within each SOC are sorted by descending unique subject incidence in the first column (`Xanomeline Low Dose`).
+
+### The Trap
+This shell compounds **four interacting `rtables` structural traps** triggered by a multi-row `cfun`:
+1. **`child_labels = "default"` hides the SOC name when `summarize_row_groups()` is present**: In standard single-row `summarize_row_groups("AEBODSYS", cfun = a_freq_j)`, `child_labels = "default"` (or `"hidden"`) works because the single content row is automatically relabeled with the SOC name (`labelstr`). When a custom `cfun` returns **2 rows** (`Subjects with >=1 TEAE` and `Total number of TEAEs`) via `c(r_subj, r_evt)`, neither row is named after the SOC! If the programmer leaves `child_labels = "default"` or sets `child_labels = "hidden"` (out of habit from standard SOC→PT tables), **the SOC names (`Cardiac disorders`, `Eye disorders`) vanish completely from the table!** `child_labels = "visible"` is mandatory on `split_rows_by("AEBODSYS")`.
+2. **Sibling `analyze()` vs. `summarize_row_groups(cfun = ...)` trap**: A model may try to avoid writing a 2-row `cfun` by using two `analyze()` calls before `AEDECOD` inside `AEBODSYS`. That creates `ElementaryTable` children instead of a `@content` table on the `AEBODSYS` node, breaking standard content-table semantics and indentation.
+3. **Leaf PT indentation collision**: Because `child_labels = "visible"` indents the 2-row `cfun` by 1 level (2 spaces) under the SOC label, a default `analyze("AEDECOD", indent_mod = 0L)` places PTs at the **same** indentation level as `Subjects with >=1 TEAE` and `Total number of TEAEs`. Explicit `indent_mod = 1L` on `analyze("AEDECOD")` is required so PTs indent beneath the SOC summary rows.
+4. **Post-processing sort crash with `jj_complex_scorefun()` on a multi-row `@content` table**: Standard `sort_at_path(path = c("AEBODSYS"), scorefun = jj_complex_scorefun(...))` assumes a 1-row content table (or specific structure) at `AEBODSYS`. With a 2-row content table, sorting `AEBODSYS` requires a custom `scorefun` that extracts row 1 (`tree_children(content_table(tt))[[1]]`) of the content table, while `jj_complex_scorefun` still works at `c("AEBODSYS", "*", "AEDECOD")`.
+
+### Reasoning Paths Exercised
+- **Row Structure (`row_struct_layout.md` Section 2.2)**: Interaction between `child_labels = "visible"`, `summarize_row_groups()`, and `indent_mod` when a `cfun` emits multiple labeled rows instead of a single facet-named content row.
+- **Custom Afuns (`custom_afuns.md` Section 3 — Tier 3 Stacking)**: Combining two `a_freq_j` calls (`count_unique_fraction` on `SOC_SUBJ` and `count` on `SOC_EVT`) via `c(r_subj, r_evt)` inside a `cfun`, forwarding `.N_col`, `.alt_df_full`, `.df_row`, and `.spl_context`.
+- **Sorting & Pruning (`introspection_sort_prune.md`)**: Writing a custom `scorefun` (`content_table(tt)` → first child row → `cell_values(ct, rowpath = ..., colpath = first_col)[[1]][1]`) when the target `TableTree` node has a multi-row content table.
+
+### Hypothesized Weaknesses Probed
+- **Missing SOC headers**: Using `child_labels = "hidden"` or `"default"` on `split_rows_by("AEBODSYS")` with a 2-row `cfun`.
+- **Flat indentation**: Forgetting `indent_mod = 1L` on `analyze("AEDECOD")`.
+- **Invalid `basic_table(topleft = ...)` argument**: Passing `topleft` to `basic_table()` instead of piping `|> append_topleft(...)`.
+- **Sort failure on multi-row content table**: Blindly applying `cont_n_onecol` or `jj_complex_scorefun` to `path = c("AEBODSYS")` without testing against a 2-row content table.
+
+### Reference `rtables` Output (Exact)
+```
+TSFAE-MULTICFUN: TEAEs by SOC (with Dual Subject/Event Summaries) and PT; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————
+System Organ Class                                                                                 
+  SOC Summary                                Xanomeline Low Dose   Xanomeline High Dose    Placebo 
+    Preferred Term                                  N=67                   N=51             N=64   
+———————————————————————————————————————————————————————————————————————————————————————————————————
+Cardiac disorders                                                                                  
+  Subjects with >=1 TEAE                         10 (14.9%)             10 (19.6%)        9 (14.1%)
+  Total number of TEAEs                              24                     21               21    
+      Sinus bradycardia                           6 (9.0%)              6 (11.8%)         1 (1.6%) 
+      Myocardial infarction                       2 (3.0%)               2 (3.9%)         4 (6.2%) 
+      Atrial fibrillation                         1 (1.5%)               1 (2.0%)         1 (1.6%) 
+      Atrial flutter                              1 (1.5%)               1 (2.0%)             0    
+      Atrioventricular block first degree         1 (1.5%)                  0                 0    
+      Bundle branch block right                   1 (1.5%)                  0             1 (1.6%) 
+      Palpitations                                1 (1.5%)                  0                 0    
+      Supraventricular extrasystoles              1 (1.5%)               1 (2.0%)         1 (1.6%) 
+      Supraventricular tachycardia                1 (1.5%)                  0                 0    
+      Ventricular extrasystoles                   1 (1.5%)               1 (2.0%)             0    
+      Atrial hypertrophy                              0                     0             1 (1.6%) 
+      Atrioventricular block second degree            0                     0             1 (1.6%) 
+      Bradycardia                                     0                     0             1 (1.6%) 
+      Bundle branch block left                        0                     0             1 (1.6%) 
+      Cardiac failure congestive                      0                     0             1 (1.6%) 
+      Tachycardia                                     0                     0             1 (1.6%) 
+Eye disorders                                                                                      
+  Subjects with >=1 TEAE                          2 (3.0%)               1 (2.0%)         1 (1.6%) 
+  Total number of TEAEs                               2                     2                 3    
+      Conjunctival haemorrhage                    1 (1.5%)                  0                 0    
+      Vision blurred                              1 (1.5%)               1 (2.0%)             0    
+      Eye allergy                                     0                     0             1 (1.6%) 
+      Eye pruritus                                    0                     0             1 (1.6%) 
+      Eye swelling                                    0                     0             1 (1.6%) 
+———————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Each SOC displays unique subjects with >=1 TEAE and total TEAE occurrences, followed by preferred terms (unique subjects).
+```
+
+---
+
+## Shell T29: Inside-Out Multi-Depth `at_sibling` Anchoring (`PARAM_LBL` → `AVISIT` + Sibling `SEX_LBL` Split + Outer Sibling Shift Analysis)
+
+### Structural Notes (from shell spec)
+- Outer row split: `PARAM_LBL` (`Alanine Aminotransferase (U/L)`, `Aspartate Aminotransferase (U/L)`).
+- Inside each `PARAM_LBL`, there are **two sibling branches at Depth 1**:
+  1. `split_rows_by("AVISIT", label_pos = "hidden")` (`Baseline`, `Cycle 02`).
+  2. `analyze("WORST_ANRIND", var_labels = "Post-Baseline Worst Status, n (%)", show_labels = "visible", at_sibling = "AVISIT")` (`LOW`, `NORMAL`, `HIGH`).
+- Inside each `AVISIT` (Depth 2), there are **two sibling branches**:
+  1. `analyze("AVAL", afun = a_summarize_ex_j, table_names = "visit_overall")` (`N`, `Mean (SD)`).
+  2. `split_rows_by("SEX_LBL", split_label = "By Sex", label_pos = "visible", at_sibling = "visit_overall")` → `analyze("AVAL", afun = a_summarize_ex_j)` (`Mean (SD)`).
+
+### The Trap
+This shell is an **"Inside-Out" Multi-Depth `at_sibling` maze** with three distinct structural pitfalls:
+1. **Two `at_sibling` hops at different nesting depths**:
+   - First, after `analyze("AVAL", table_names = "visit_overall")` at depth 3 (`PARAM_LBL → AVISIT → visit_overall`), the layout must step back 1 level to `AVISIT` using `split_rows_by("SEX_LBL", ..., at_sibling = "visit_overall")` so `By Sex` is a sibling of `visit_overall` inside each `AVISIT`.
+   - Next, after `analyze("AVAL", table_names = "visit_sex")` at depth 4 (`PARAM_LBL → AVISIT → SEX_LBL → visit_sex`), the layout must step back **2 levels** to `PARAM_LBL` using `analyze("WORST_ANRIND", ..., at_sibling = "AVISIT")` so `Post-Baseline Worst Status, n (%)` is a sibling of `AVISIT` inside each `PARAM_LBL`!
+   - Using `nested = FALSE` instead of `at_sibling = "AVISIT"` is fatal: it escapes all the way to the root of the table and places `Post-Baseline Worst Status, n (%)` once at the very bottom of the entire table instead of inside each `PARAM_LBL`!
+2. **Undocumented `rtables` `at_sibling` auto-visibility side-effect on `AVISIT`**: When `analyze(..., at_sibling = "AVISIT")` references a `split_rows_by("AVISIT")` node whose `label_pos` was left at its default (`"hidden"` implicitly or `"default"`), `rtables` automatically flips the referenced split's `label_pos` to `"visible"` so the two sibling sections under `PARAM_LBL` have section headers — which prints a literal `"AVISIT"` row above `Baseline`! To prevent `"AVISIT"` from appearing as an unwanted row header, `split_rows_by("AVISIT", label_pos = "hidden")` **must** explicitly specify `label_pos = "hidden"`.
+3. **Mixed Longitudinal Continuous + Subject-Level Shift on the Same Dataset**: `AVAL` is analyzed at `Baseline` and `Cycle 02`, whereas `WORST_ANRIND` is derived across **all** post-baseline records (`ABLFL != "Y"`) for that subject and parameter. If the programmer filters `adlb` to `AVISIT %in% c("Baseline", "Cycle 02")` *before* deriving `WORST_ANRIND`, or forgets to include subjects who only have post-baseline records outside `Baseline`/`Cycle 02` (or doesn't restrict `AVAL` inside the visit split), either the shift counts or the visit summaries are corrupted.
+
+### Reasoning Paths Exercised
+- **Row Structure (`row_struct_layout.md` Section 3 — Non-Linear Tree Insertion with `at_sibling`)**: Navigating across multiple tree depths using `at_sibling = "visit_overall"` (depth 2) and `at_sibling = "AVISIT"` (depth 1) without escaping `PARAM_LBL`.
+- **Row Structure (`row_struct_layout.md` Section 2.2 — `label_pos = "hidden"`)**: Explicitly locking `label_pos = "hidden"` on a `split_rows_by()` node that will later be targeted by `at_sibling`.
+- **Data Prep & Custom Afuns**: Combining visit-filtered continuous summaries (`a_summarize_ex_j`) with a parameter-level subject worst-shift categorical summary (`a_freq_j` with `denom = "n_altdf"`).
+
+### Hypothesized Weaknesses Probed
+- **Using `nested = FALSE` instead of `at_sibling = "AVISIT"`**: Escaping the `PARAM_LBL` split entirely.
+- **Spurious `"AVISIT"` label row**: Omitting explicit `label_pos = "hidden"` on `split_rows_by("AVISIT")` when targeting it with `at_sibling = "AVISIT"`.
+- **Wrong `at_sibling` target name**: Targeting `"visit_overall"` or `"SEX_LBL"` instead of `"AVISIT"` for the `WORST_ANRIND` block, which nests `Post-Baseline Worst Status` inside every visit instead of once per parameter.
+
+### Reference `rtables` Output (Exact)
+```
+TSFLAB-ATSIB2D: Laboratory Summary by Visit, Sex Subgroup, and Post-Baseline Shift; Safety Analysis Set
+
+——————————————————————————————————————————————————————————————————————————————————————————————
+                                      Xanomeline Low Dose   Xanomeline High Dose     Placebo  
+                                             N=67                   N=51              N=64    
+——————————————————————————————————————————————————————————————————————————————————————————————
+Alanine Aminotransferase (U/L)                                                                
+  Baseline                                                                                    
+    N                                         67                     51                64     
+    Mean (SD)                             17.6 (9.2)            19.5 (10.5)        17.3 (7.4) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                         16.8 (9.7)             16.5 (4.5)        17.4 (8.2) 
+      Male                                                                                    
+        Mean (SD)                         19.0 (8.4)            22.2 (13.3)        17.2 (5.9) 
+  Cycle 02                                                                                    
+    N                                         61                     49                61     
+    Mean (SD)                             20.5 (11.6)            21.8 (8.7)        17.9 (13.2)
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                         19.7 (13.1)            18.9 (5.7)        18.7 (16.0)
+      Male                                                                                    
+        Mean (SD)                         21.8 (8.9)            24.2 (10.0)        16.7 (6.3) 
+  Post-Baseline Worst Status, n (%)                                                           
+    LOW                                        0                     0                  0     
+    NORMAL                                44 (65.7%)             43 (84.3%)        56 (87.5%) 
+    HIGH                                   5 (7.5%)              8 (15.7%)          6 (9.4%)  
+Aspartate Aminotransferase (U/L)                                                              
+  Baseline                                                                                    
+    N                                         67                     51                64     
+    Mean (SD)                             22.5 (8.2)             23.5 (6.7)        23.2 (6.7) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                         22.6 (8.9)             23.2 (5.8)        23.9 (7.1) 
+      Male                                                                                    
+        Mean (SD)                         22.2 (7.1)             23.6 (7.5)        21.9 (5.8) 
+  Cycle 02                                                                                    
+    N                                         61                     49                61     
+    Mean (SD)                             24.0 (8.2)             23.8 (4.8)        23.7 (13.6)
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                         23.8 (9.6)             24.4 (4.9)        24.9 (16.8)
+      Male                                                                                    
+        Mean (SD)                         24.5 (5.6)             23.3 (4.8)        21.7 (5.0) 
+  Post-Baseline Worst Status, n (%)                                                           
+    LOW                                        0                     0                  0     
+    NORMAL                                43 (64.2%)             45 (88.2%)        56 (87.5%) 
+    HIGH                                   6 (9.0%)              6 (11.8%)          6 (9.4%)  
+——————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Each visit displays overall summary statistics followed by sex-specific Mean (SD).
+Post-Baseline Worst Reference Range Status summarizes each subject once per parameter below all visits.
+```
+
+---
+
+## Shell T30: Parallel Non-Nested Column Banners (`All Subjects` + `Treatment Group` + `Sex Subgroup` + `Age Group (Years)`) via `add_overall_col()` Composition
+
+### Structural Notes (from shell spec)
+- 4 parallel, non-nested top-level column banners over the same 182 safety subjects:
+  1. `All Subjects` (single overall column, `N=182`)
+  2. `Treatment Group` spanning `Xanomeline Low Dose` (`N=67`), `Xanomeline High Dose` (`N=51`), `Placebo` (`N=64`)
+  3. `Sex Subgroup` spanning `Female` (`N=106`), `Male` (`N=76`)
+  4. `Age Group (Years)` spanning `<65` (`N=25`), `65 to <75` (`N=50`), `>=75` (`N=107`)
+- Programming Note 1 explicitly forbids duplicating or row-binding (`bind_rows`) `ADSL`/`ADAE`.
+- Row structure: Top-level `Subjects with >=1 TEAE in Selected SOCs` (`analyze("ANY_TEAE")`), followed by `AEBODSYS → AEDECOD` sorted by the `All Subjects` column.
+
+### The Trap
+How do you create **parallel, non-nested column banners** in `rtables` where each banner has its own spanning header (`Treatment Group`, `Sex Subgroup`, `Age Group (Years)`) without duplicating the dataset or Cartesian-nesting `TRT01A × SEX_LBL × AGE_GRP`?
+1. **The `split_cols_by(..., nested = FALSE)` spanning-header trap**: If a programmer writes:
+   ```r
+   split_cols_by("TRT01A", nested = FALSE) |>
+   split_cols_by("SEX_LBL", nested = FALSE) |>
+   split_cols_by("AGE_GRP", nested = FALSE)
+   ```
+   the columns sit side-by-side at depth 1, **with NO spanning headers** (`Treatment Group`, `Sex Subgroup`, `Age Group (Years)` are completely missing!). `split_cols_by()` does not render `split_label` as a column spanning header.
+2. **The `add_overall_col("Banner") |> split_cols_by("VAR")` idiom (`col_struct_layout.md` Section 5)**: Because `add_overall_col("Banner")` always inserts a new top-level overall column at the root (`nested = FALSE` by default) and `split_cols_by("VAR")` defaults to `nested = TRUE` (nesting underneath the most recently added column node!), chaining:
+   ```r
+   add_overall_col("All Subjects") |>
+   add_overall_col("Treatment Group") |>
+   split_cols_by("TRT01A") |>
+   add_overall_col("Sex Subgroup") |>
+   split_cols_by("SEX_LBL") |>
+   add_overall_col("Age Group (Years)") |>
+   split_cols_by("AGE_GRP")
+   ```
+   creates `All Subjects` as a standalone leaf column, and turns `"Treatment Group"`, `"Sex Subgroup"`, and `"Age Group (Years)"` into parallel spanning banners over their respective split variables — **with zero data duplication**!
+3. **Contract 1 across all 3 split variables**: `TRT01A`, `SEX_LBL`, and `AGE_GRP` must all exist with identical factor levels on both `adsl` (`alt_counts_df`) and `adae` (`df`).
+
+### Reasoning Paths Exercised
+- **Column Structure (`col_struct_layout.md` Section 5 — Non-Nested Parallel Column Splits with Spanning Headers)**: Combining `add_overall_col("Banner Name")` (`nested = FALSE`) with `split_cols_by("VAR")` (`nested = TRUE`) to build parallel multi-variable banners over unmodified `ADSL`/`ADAE`.
+- **Column Structure (Contract 1)**: Joining `SEX_LBL` and `AGE_GRP` from `adsl` onto `adae` with matching factor levels so all 9 leaf columns partition both `df` and `alt_counts_df` identically.
+- **Sorting (`introspection_sort_prune.md`)**: Extracting `first_col <- col_paths(tbl)[[1]]` (`c("All Subjects", "All Subjects")`) and sorting SOCs and PTs via `jj_complex_scorefun(colpath = first_col)`.
+
+### Hypothesized Weaknesses Probed
+- **Cartesian column explosion**: Forgetting `add_overall_col()` or `nested = FALSE` and nesting `TRT01A → SEX_LBL → AGE_GRP` into 1 + 3×2×3 = 19 columns.
+- **Missing spanning headers**: Using `split_cols_by("TRT01A", nested = FALSE)` directly, which omits `"Treatment Group"`, `"Sex Subgroup"`, and `"Age Group (Years)"` from the column header tree.
+- **Violating Programming Note 1**: Row-binding `ADSL` and `ADAE` 4 times (`bind_rows`) to fake a spanning banner variable.
+
+### Reference `rtables` Output (Exact)
+```
+TSFAE-BANNER: TEAEs by Parallel Treatment, Sex, and Age Group Banners; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                             Treatment Group                            Sex Subgroup                 Age Group (Years)         
+                                          All Subjects   Xanomeline Low Dose   Xanomeline High Dose    Placebo       Female        Male         <65      65 to <75      >=75   
+                                             N=182              N=67                   N=51              N=64        N=106         N=76        N=25        N=50        N=107   
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Subjects with >=1 TEAE in Selected SOCs    32 (17.6%)        11 (16.4%)             11 (21.6%)        10 (15.6%)   16 (15.1%)   16 (21.1%)   3 (12.0%)   5 (10.0%)   24 (22.4%)
+Cardiac disorders                          29 (15.9%)        10 (14.9%)             10 (19.6%)        9 (14.1%)    15 (14.2%)   14 (18.4%)   3 (12.0%)   4 (8.0%)    22 (20.6%)
+  Sinus bradycardia                        13 (7.1%)          6 (9.0%)              6 (11.8%)          1 (1.6%)     5 (4.7%)    8 (10.5%)    1 (4.0%)    4 (8.0%)     8 (7.5%) 
+  Myocardial infarction                     8 (4.4%)          2 (3.0%)               2 (3.9%)          4 (6.2%)     7 (6.6%)     1 (1.3%)        0       1 (2.0%)     7 (6.5%) 
+  Atrial fibrillation                       3 (1.6%)          1 (1.5%)               1 (2.0%)          1 (1.6%)     1 (0.9%)     2 (2.6%)        0           0        3 (2.8%) 
+  Supraventricular extrasystoles            3 (1.6%)          1 (1.5%)               1 (2.0%)          1 (1.6%)     3 (2.8%)        0            0           0        3 (2.8%) 
+  Atrial flutter                            2 (1.1%)          1 (1.5%)               1 (2.0%)             0            0         2 (2.6%)        0           0        2 (1.9%) 
+  Bundle branch block right                 2 (1.1%)          1 (1.5%)                  0              1 (1.6%)     1 (0.9%)     1 (1.3%)        0           0        2 (1.9%) 
+  Ventricular extrasystoles                 2 (1.1%)          1 (1.5%)               1 (2.0%)             0         1 (0.9%)     1 (1.3%)        0           0        2 (1.9%) 
+  Atrial hypertrophy                        1 (0.5%)              0                     0              1 (1.6%)        0         1 (1.3%)    1 (4.0%)        0           0     
+  Atrioventricular block first degree       1 (0.5%)          1 (1.5%)                  0                 0            0         1 (1.3%)        0           0        1 (0.9%) 
+  Atrioventricular block second degree      1 (0.5%)              0                     0              1 (1.6%)        0         1 (1.3%)    1 (4.0%)        0           0     
+  Bradycardia                               1 (0.5%)              0                     0              1 (1.6%)     1 (0.9%)        0            0       1 (2.0%)        0     
+  Bundle branch block left                  1 (0.5%)              0                     0              1 (1.6%)     1 (0.9%)        0            0           0        1 (0.9%) 
+  Cardiac failure congestive                1 (0.5%)              0                     0              1 (1.6%)     1 (0.9%)        0            0           0        1 (0.9%) 
+  Palpitations                              1 (0.5%)          1 (1.5%)                  0                 0            0         1 (1.3%)        0       1 (2.0%)        0     
+  Supraventricular tachycardia              1 (0.5%)          1 (1.5%)                  0                 0            0         1 (1.3%)        0           0        1 (0.9%) 
+  Tachycardia                               1 (0.5%)              0                     0              1 (1.6%)     1 (0.9%)        0            0           0        1 (0.9%) 
+Eye disorders                               4 (2.2%)          2 (3.0%)               1 (2.0%)          1 (1.6%)     2 (1.9%)     2 (2.6%)        0       1 (2.0%)     3 (2.8%) 
+  Vision blurred                            2 (1.1%)          1 (1.5%)               1 (2.0%)             0         1 (0.9%)     1 (1.3%)        0       1 (2.0%)     1 (0.9%) 
+  Conjunctival haemorrhage                  1 (0.5%)          1 (1.5%)                  0                 0         1 (0.9%)        0            0           0        1 (0.9%) 
+  Eye allergy                               1 (0.5%)              0                     0              1 (1.6%)        0         1 (1.3%)        0           0        1 (0.9%) 
+  Eye pruritus                              1 (0.5%)              0                     0              1 (1.6%)        0         1 (1.3%)        0           0        1 (0.9%) 
+  Eye swelling                              1 (0.5%)              0                     0              1 (1.6%)        0         1 (1.3%)        0           0        1 (0.9%) 
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Columns represent parallel non-nested banners over the same Safety Analysis Set.
+Percentages are based on column N within each banner facet.
+```
+
+---
+
+## Shell T31: Asymmetric Multi-Variable Visit Columns (`make_split_fun` + `restrict_facets` Pruning `CFB` at `Baseline`) + Multi-Row `cfun` Interacting with `split_cols_by_multivar`
+
+### Structural Notes (from shell spec)
+- Column hierarchy: `AVISIT` (`Baseline`, `Cycle 02`, `Cycle 04`) → `c("AVAL", "CHG")` (`Observed`, `CFB`), with **`CFB` structurally pruned under `Baseline`** so `Baseline` has 1 sub-column (`Observed`) and `Cycle 02` / `Cycle 04` have 2 sub-columns (`Observed`, `CFB`).
+- Row hierarchy: `PARAM` (`Systolic Blood Pressure (mmHg)`, `Diastolic Blood Pressure (mmHg)`) → `TRT01A` (`Xanomeline Low Dose`, `Xanomeline High Dose`, `Placebo`).
+- Each `TRT01A` facet has a visible header (`child_labels = "visible"`), followed by a **2-row group summary (`cfun`)** (`n` and `Min, Max`) and doubly-indented leaf rows (`Mean (SD)` and `Median`, `indent_mod = 1L`).
+
+### The Trap
+This shell combines **asymmetric multi-variable column splitting** with **multi-row `cfun` dispatch across `split_cols_by_multivar`**:
+1. **Pruning `CFB` under `Baseline` in `split_cols_by_multivar()`**: `drop_split_levels` cannot drop `CHG` under `Baseline` in `split_cols_by_multivar(c("AVAL", "CHG"))` because `split_cols_by_multivar` does not split by factor levels — it creates one facet per variable regardless of `NA`s! The programmer must use a custom post-processing step via `make_split_fun(post = list(drop_cfb_at_baseline))` that checks `tail(.spl_context$value, 1) == "Baseline"` and applies `restrict_facets("AVAL", op = "keep")(ret, spl, fulldf)` (`col_struct_layout.md` Section 7.2).
+2. **Active column variable lookup inside `summarize_row_groups(cfun = ...)` under `split_cols_by_multivar()`**: When `analyze_colvars(afun = ...)` is used at the leaf level, `rtables` passes each column's variable (`AVAL` or `CHG`) to `afun`. However, in `summarize_row_groups("TRT01A", cfun = cfun_trt_n_range)`, `.var` is `"TRT01A"` (the row-split variable), NOT `"AVAL"` or `"CHG"`! If `cfun_trt_n_range` inspects `df[[.var]]`, it gets the factor `TRT01A` and crashes on `min(x)` / `max(x)`! And if it hardcodes `df$AVAL`, then the `CFB` columns in `n` and `Min, Max` secretly report `Observed` (`AVAL`) values instead of `CHG` values! The `cfun` must inspect `.spl_context$cur_col_id` (e.g. checking whether `"AVAL"` or `"CHG"` is the active column facet) to select `df[["AVAL"]]` vs `df[["CHG"]]`!
+3. **`child_labels = "visible"` + `indent_mod = 1L` on `analyze_colvars()`**: Just as in T28, because `cfun_trt_n_range` returns 2 rows (`n`, `Min, Max`), `split_rows_by("TRT01A")` must set `child_labels = "visible"` so the treatment arm names remain visible, and `analyze_colvars()` must set `indent_mod = 1L` so `Mean (SD)` and `Median` indent beneath `n` and `Min, Max`.
+
+### Reasoning Paths Exercised
+- **Column Structure (`col_struct_layout.md` Section 7.2 — Asymmetric Column Tree via `make_split_fun` + `restrict_facets`)**: Conditionally pruning the `CHG` (`CFB`) column facet when the parent `AVISIT` facet is `"Baseline"`.
+- **Custom Afuns (`custom_afuns.md` — `.spl_context` introspection)**: Reading `tail(.spl_context$cur_col_id, 1)` inside a `cfun` to determine which column variable (`AVAL` vs `CHG`) is active in the current column cell.
+- **Row Structure (`row_struct_layout.md`)**: Combining `child_labels = "visible"`, 2-row `summarize_row_groups()`, `analyze_colvars(..., indent_mod = 1L)`, and `append_topleft(c("Parameter", "  Treatment Group"))`.
+
+### Hypothesized Weaknesses Probed
+- **Using `drop_split_levels` on `split_cols_by_multivar`**: Leaves an empty or `NA` `Baseline -> CFB` column in the table instead of pruning it to 5 columns total.
+- **Hardcoding `df$AVAL` or using `df[[.var]]` inside `cfun_trt_n_range`**: Either crashing on `min(df[["TRT01A"]])` or reporting `AVAL` range in the `CFB` columns.
+- **Disappeared `TRT01A` headers**: Leaving `child_labels = "default"` on `split_rows_by("TRT01A")` with a 2-row `cfun`.
+
+### Reference `rtables` Output (Exact)
+```
+TSFVS-LONGCB: Vital Signs Across Longitudinal Visit Columns with Conditional CFB; Safety Analysis Set
+
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+Parameter                           Baseline              Cycle 02                     Cycle 04         
+  Treatment Group                   Observed       Observed         CFB         Observed         CFB    
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+Systolic Blood Pressure (mmHg)                                                                          
+  Xanomeline Low Dose                                                                                   
+    n                                  67             66            66             42            42     
+    Min, Max                      103.3, 181.3   96.7, 173.3    -27.3, 26.0   101.3, 169.3   -28.3, 22.0
+        Mean (SD)                 137.1 (16.3)   135.0 (16.9)   -1.8 (12.8)   134.6 (17.2)   -1.6 (11.7)
+        Median                       136.7          132.7          -0.3          132.3           0.7    
+  Xanomeline High Dose                                                                                  
+    n                                  51             51            51             47            47     
+    Min, Max                      100.0, 179.3   104.0, 178.3   -49.3, 31.7   97.3, 164.0    -48.7, 38.0
+        Mean (SD)                 137.4 (17.3)   131.5 (15.0)   -6.0 (16.2)   130.3 (16.0)   -8.4 (15.8)
+        Median                       138.0          132.0          -5.3          129.3          -8.3    
+  Placebo                                                                                               
+    n                                  63             62            61             55            54     
+    Min, Max                      86.7, 181.3    92.7, 166.7    -32.0, 35.3   88.0, 203.3    -38.7, 48.0
+        Mean (SD)                 136.8 (17.7)   133.6 (16.1)   -3.6 (13.1)   134.1 (19.1)   -2.0 (16.0)
+        Median                       136.0          131.7          -2.3          131.3          -2.0    
+Diastolic Blood Pressure (mmHg)                                                                         
+  Xanomeline Low Dose                                                                                   
+    n                                  67             66            66             42            42     
+    Min, Max                       57.3, 99.3    59.3, 100.7    -22.0, 16.7    56.7, 98.7    -18.7, 18.7
+        Mean (SD)                  76.2 (9.3)     75.8 (9.1)    -0.4 (7.3)     75.4 (8.7)    -0.3 (7.2) 
+        Median                        76.0           75.8           0.0           75.3          -0.3    
+  Xanomeline High Dose                                                                                  
+    n                                  51             51            51             47            47     
+    Min, Max                      53.0, 102.0     52.7, 92.3    -33.3, 16.3    53.0, 96.0    -24.7, 15.0
+        Mean (SD)                 78.5 (10.2)     76.7 (9.0)    -1.7 (9.5)     76.2 (9.6)    -2.7 (9.3) 
+        Median                        78.7           75.7          -1.3           77.3          -2.7    
+  Placebo                                                                                               
+    n                                  63             62            61             55            54     
+    Min, Max                      47.3, 103.3     53.3, 96.7    -20.7, 21.7   51.3, 103.3    -20.0, 16.0
+        Mean (SD)                 76.0 (10.8)     74.3 (9.4)    -1.6 (7.9)     74.4 (9.5)    -2.1 (8.1) 
+        Median                        76.0           74.0          -1.3           74.7          -2.0    
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Baseline displays Observed values only; post-baseline visits display both Observed and Change from Baseline (CFB).
+Each treatment group header summarizes n and Min, Max via a multi-row group summary.
+```
+
+---
+
+## Shell T32: Subgroup TEAEs with Mixed-RD Multi-Row `cfun` + Heterogeneous Sibling Subsections (`at_sibling`) + `denom_by`
+
+### Structural Notes (from shell spec)
+- Column structure: `grouped_cols_w_diffs()` with spanning header `"Active Study Agent"` over active arms vs `"Placebo"` and `"Risk Difference (%) (95% CI)"` comparison columns (Wald method).
+- Outer row split: `SEX_LBL` (`Female`, `Male`) with `child_labels = "visible"`.
+- Attached to `SEX_LBL` is a **2-row group summary (`cfun_sex_dual`)** where the two rows have **different Risk Difference column behavior**:
+  1. `Subjects in subgroup, n` — displays the sex-specific `ADSL` denominator count `xx` (`count_unique` from `alt_counts_df`) in treatment columns and is **blank** in the Risk Difference columns (`riskdiff = FALSE`).
+  2. `Subjects with >=1 TEAE, n (%)` — displays `xx/xx (xx.x%)` (`count_unique_denom_fraction` with `denom = "n_altdf"`, `denom_by = "SEX_LBL"`) in treatment columns and **Wald Risk Difference** `xx.x (xx.x, xx.x)` in the Risk Difference columns (`riskdiff = TRUE`, `method = "wald"`).
+- Inside each `SEX_LBL` facet, two heterogeneous sibling analysis sections follow:
+  1. `TEAEs by Maximum Severity` (`MAX_SEV`: `Mild`, `Moderate`, `Severe`; pre-computed per subject in data prep so `a_freq_j` with `riskdiff = TRUE` can be used instead of `a_maxlev`).
+  2. `TEAEs Leading to Discontinuation by SOC` (`DISC_AEBODSYS`: `AEACN == "DRUG WITHDRAWN"`, `drop_levels = TRUE`, anchored via `at_sibling = "max_sev_sec"` so it stays inside `SEX_LBL`).
+
+### The Trap
+This shell combines **five interacting layout and `a_freq_j` traps**:
+1. **Multi-row `cfun` with mixed `riskdiff = FALSE` (Row 1) and `riskdiff = TRUE` (Row 2) + `ref_path` forwarding**: Inside `cfun_sex_dual`, Row 1 calls `a_freq_j(..., denom = "n_altdf", denom_by = "SEX_LBL", .stats = "count_unique", riskdiff = FALSE)` on `.alt_df` (or `SUBGRP_N` derived on `adsl` and `adae`) so the RD columns are blank, while Row 2 calls `a_freq_j(..., denom = "n_altdf", denom_by = "SEX_LBL", .stats = "count_unique_denom_fraction", riskdiff = TRUE, method = "wald", ref_path = ref_path)`. Notice that `grouped_cols_w_diffs` injects `ref_path` via `extra_args` only when `extra_args` is attached or inherited; if `cfun_sex_dual` does not accept `ref_path = NULL` (or fall back to `c("colspan_trt", " ", "TRT01A", ctrl_grp)`), `a_freq_j(..., riskdiff = TRUE)` inside a custom wrapper fails!
+2. **`child_labels = "visible"` required on `split_rows_by("SEX_LBL")`**: Because `cfun_sex_dual` returns 2 rows (`Subjects in subgroup, n` and `Subjects with >=1 TEAE, n (%)`), omitting `child_labels = "visible"` hides `"Female"` and `"Male"`.
+3. **`a_maxlev` incompatibility with Risk Difference columns**: `a_maxlev` does not support `riskdiff = TRUE` columns (`select_afuns.md` Section 4). The programmer must pre-compute each subject's worst severity (`MAX_SEV` on their worst-severity TEAE row, `NA` on other rows) in data prep and analyze it with a non-`NA`-filtering `a_freq_j` wrapper (`riskdiff = TRUE`, `denom = "n_altdf"`, `denom_by = "SEX_LBL"`).
+4. **Sibling section anchoring inside `SEX_LBL` (`at_sibling = "max_sev_sec"`, NOT `nested = FALSE`)**: The second subsection (`TEAEs Leading to Discontinuation by SOC`) must appear inside each `SEX_LBL` facet immediately after `TEAEs by Maximum Severity`. Using `nested = FALSE` escapes `SEX_LBL` to the table root; `at_sibling = "max_sev_sec"` keeps it inside `SEX_LBL`.
+5. **Subgroup-specific denominators (`denom = "n_altdf"`, `denom_by = "SEX_LBL"`)**: Every percentage (`33/41`, `23/24`, `31/41` for `Female`; `23/26`, `25/27`, `18/23` for `Male`) uses the sex-by-treatment subgroup size from `ADSL`, not the full column `N` (`67`, `51`, `64`).
+
+### Reasoning Paths Exercised
+- **Custom Afuns (`custom_afuns.md` Section 3 — Tier 3 Stacking with Mixed RD Behavior)**: Stacking two `a_freq_j` calls inside a `cfun` where Row 1 suppresses RD (`riskdiff = FALSE`) and Row 2 computes Wald RD (`riskdiff = TRUE`, forwarding `ref_path`).
+- **Junco `a_freq_j` Usage (`junco_a_freq_j_usage.md` — Subgroup Denominators)**: Combining `denom = "n_altdf"` with `denom_by = "SEX_LBL"` and `.stats = "count_unique_denom_fraction"` across both the `cfun` and the inner sibling `analyze()` blocks.
+- **Row Structure (`row_struct_layout.md` Section 3)**: Using `at_sibling = "max_sev_sec"` inside an outer subgroup split (`SEX_LBL`) to stack two heterogeneous `analyze()` blocks without escaping the subgroup split.
+
+### Hypothesized Weaknesses Probed
+- **Populating RD columns on Row 1 (`Subjects in subgroup, n`)**: Computing risk differences on the subgroup sample size row instead of leaving RD cells blank (`riskdiff = FALSE`).
+- **Using `a_maxlev` with RD columns**: Triggering errors or blank RD columns in `TEAEs by Maximum Severity`.
+- **Using `nested = FALSE` for `DISC_AEBODSYS`**: Escaping `SEX_LBL` and placing `TEAEs Leading to Discontinuation by SOC` at the bottom of the table outside `Female`/`Male`.
+- **Using full-arm `N` (`67`, `51`, `64`) instead of `denom_by = "SEX_LBL"`**: Dividing by `N_col` instead of the sex-specific `ADSL` counts (`41`, `24`, `41` and `26`, `27`, `23`).
+
+### Reference `rtables` Output (Exact)
+```
+TSFAE-SUBGRP-MIXED: Subgroup TEAEs with Dual-Row Subgroup Header, Severity, and Discontinuation SOCs; Safety Analysis Set
+
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                                        Active Study Agent                                                 Risk Difference (%) (95% CI)                  
+                                                                            Xanomeline Low Dose   Xanomeline High Dose      Placebo      Xanomeline Low Dose vs Placebo   Xanomeline High Dose vs Placebo
+                                                                                   N=67                   N=51               N=64                     N=67                             N=51              
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Female                                                                                                                                                                                                   
+  Subjects in subgroup, n                                                           41                     24                 41                                                                         
+  Subjects with >=1 TEAE, n (%)                                                33/41 (80.5%)         23/24 (95.8%)       31/41 (75.6%)         4.9 (-13.0, 22.8)                 20.2 (4.8, 35.6)        
+    TEAEs by Maximum Severity                                                                                                                                                                            
+      Mild                                                                     9/41 (22.0%)           4/24 (16.7%)       9/41 (22.0%)          0.0 (-17.9, 17.9)                -5.3 (-24.9, 14.3)       
+      Moderate                                                                 15/41 (36.6%)         11/24 (45.8%)       13/41 (31.7%)         4.9 (-15.6, 25.4)                14.1 (-10.4, 38.6)       
+      Severe                                                                   9/41 (22.0%)           8/24 (33.3%)       9/41 (22.0%)          0.0 (-17.9, 17.9)                11.4 (-11.3, 34.1)       
+    TEAEs Leading to Discontinuation by SOC                                                                                                                                                              
+      Cardiac disorders                                                         2/41 (4.9%)               0/24               0/41               4.9 (-1.7, 11.5)                  0.0 (0.0, 0.0)         
+      Gastrointestinal disorders                                                2/41 (4.9%)           1/24 (4.2%)         3/41 (7.3%)          -2.4 (-12.8, 7.9)                 -3.2 (-14.4, 8.1)       
+      General disorders and administration site conditions                      2/41 (4.9%)           6/24 (25.0%)        2/41 (4.9%)           0.0 (-9.3, 9.3)                  20.1 (1.6, 38.7)        
+      Infections and infestations                                               2/41 (4.9%)               0/24            2/41 (4.9%)           0.0 (-9.3, 9.3)                  -4.9 (-11.5, 1.7)       
+      Investigations                                                            1/41 (2.4%)               0/24               0/41               2.4 (-2.3, 7.2)                   0.0 (0.0, 0.0)         
+      Musculoskeletal and connective tissue disorders                           1/41 (2.4%)               0/24               0/41               2.4 (-2.3, 7.2)                   0.0 (0.0, 0.0)         
+      Neoplasms benign, malignant and unspecified (incl cysts and polyps)       1/41 (2.4%)               0/24               0/41               2.4 (-2.3, 7.2)                   0.0 (0.0, 0.0)         
+      Nervous system disorders                                                  2/41 (4.9%)           3/24 (12.5%)           0/41               4.9 (-1.7, 11.5)                 12.5 (-0.7, 25.7)       
+      Psychiatric disorders                                                        0/41                   0/24            1/41 (2.4%)           -2.4 (-7.2, 2.3)                 -2.4 (-7.2, 2.3)        
+      Respiratory, thoracic and mediastinal disorders                           1/41 (2.4%)               0/24               0/41               2.4 (-2.3, 7.2)                   0.0 (0.0, 0.0)         
+      Skin and subcutaneous tissue disorders                                    4/41 (9.8%)           4/24 (16.7%)        3/41 (7.3%)           2.4 (-9.6, 14.5)                 9.3 (-7.6, 26.3)        
+      Surgical and medical procedures                                              0/41                   0/24            1/41 (2.4%)           -2.4 (-7.2, 2.3)                 -2.4 (-7.2, 2.3)        
+      Vascular disorders                                                           0/41                   0/24            1/41 (2.4%)           -2.4 (-7.2, 2.3)                 -2.4 (-7.2, 2.3)        
+Male                                                                                                                                                                                                     
+  Subjects in subgroup, n                                                           26                     27                 23                                                                         
+  Subjects with >=1 TEAE, n (%)                                                23/26 (88.5%)         25/27 (92.6%)       18/23 (78.3%)         10.2 (-10.7, 31.1)                14.3 (-5.2, 33.9)       
+    TEAEs by Maximum Severity                                                                                                                                                                            
+      Mild                                                                     8/26 (30.8%)           6/27 (22.2%)       11/23 (47.8%)        -17.1 (-44.1, 10.0)               -25.6 (-51.3, 0.1)       
+      Moderate                                                                 11/26 (42.3%)         13/27 (48.1%)       4/23 (17.4%)           24.9 (0.4, 49.4)                 30.8 (6.4, 55.2)        
+      Severe                                                                   4/26 (15.4%)           6/27 (22.2%)       3/23 (13.0%)          2.3 (-17.2, 21.9)                 9.2 (-11.7, 30.0)       
+    TEAEs Leading to Discontinuation by SOC                                                                                                                                                              
+      Cardiac disorders                                                            0/26                   0/27            1/23 (4.3%)          -4.3 (-12.7, 4.0)                 -4.3 (-12.7, 4.0)       
+      Eye disorders                                                             1/26 (3.8%)               0/27               0/23               3.8 (-3.5, 11.2)                  0.0 (0.0, 0.0)         
+      Gastrointestinal disorders                                                2/26 (7.7%)           2/27 (7.4%)         2/23 (8.7%)          -1.0 (-16.4, 14.4)               -1.3 (-16.5, 13.9)       
+      General disorders and administration site conditions                     4/26 (15.4%)           2/27 (7.4%)        4/23 (17.4%)          -2.0 (-22.8, 18.8)               -10.0 (-28.4, 8.4)       
+      Infections and infestations                                                  0/26               1/27 (3.7%)         1/23 (4.3%)          -4.3 (-12.7, 4.0)                -0.6 (-11.6, 10.3)       
+      Injury, poisoning and procedural complications                               0/26               2/27 (7.4%)            0/23                0.0 (0.0, 0.0)                  7.4 (-2.5, 17.3)        
+      Investigations                                                            1/26 (3.8%)               0/27            1/23 (4.3%)          -0.5 (-11.6, 10.6)                -4.3 (-12.7, 4.0)       
+      Nervous system disorders                                                     0/26               4/27 (14.8%)           0/23                0.0 (0.0, 0.0)                  14.8 (1.4, 28.2)        
+      Psychiatric disorders                                                        0/26               2/27 (7.4%)            0/23                0.0 (0.0, 0.0)                  7.4 (-2.5, 17.3)        
+      Reproductive system and breast disorders                                     0/26                   0/27            1/23 (4.3%)          -4.3 (-12.7, 4.0)                 -4.3 (-12.7, 4.0)       
+      Respiratory, thoracic and mediastinal disorders                              0/26               1/27 (3.7%)            0/23                0.0 (0.0, 0.0)                  3.7 (-3.4, 10.8)        
+      Skin and subcutaneous tissue disorders                                   3/26 (11.5%)           4/27 (14.8%)        1/23 (4.3%)           7.2 (-7.7, 22.0)                 10.5 (-5.3, 26.2)       
+      Vascular disorders                                                           0/26                   0/27            1/23 (4.3%)          -4.3 (-12.7, 4.0)                 -4.3 (-12.7, 4.0)       
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Subgroup header displays sex-specific N (blank in Risk Difference columns) and overall TEAE incidence.
+Severity and Discontinuation SOC sections use sex-specific denominators within each treatment group.
+```
+
+---
+
+## Updated Coverage Matrix (T21–T32)
 
 | Shell | Col Struct | Row Struct | Select Afuns | Custom Afuns | Sort/Prune | Key Reasoning Traps |
 |-------|-----------|-----------|-------------|-------------|-----------|-------------------|
@@ -922,17 +1327,22 @@ The model has been trained (via row_struct_layout.md Section 5.2) to be WARY of 
 | T25   | Simple    | Stacked flags | a_freq_j | — | — | Standalone marginal summary anti-pattern; no-op analyze trap |
 | T26   | Spanning+RD | SOC→PT | a_freq_j | — | — | Contract 1 after filtering; stale factor levels; derived var scope |
 | T27   | Simple    | SOC→PT→Severity | a_maxlev | — | — | drop_split_levels inverted pitfall; ragged structure intentional |
+| T28   | Simple + 3-line topleft | SOC (`child_labels = "visible"`) → 2-row `cfun` → PT (`indent_mod = 1L`) | a_freq_j | 2-row `cfun` (`count_unique_fraction` + `count`) | Custom `scorefun` on row 1 of 2-row `@content` + `jj_complex_scorefun` | `child_labels = "default"` hides SOC label when `cfun` returns 2 stat rows; `indent_mod = 1L` on leaf PTs; custom `scorefun` for multi-row `@content` |
+| T29   | Simple    | Inside-out 2-depth `at_sibling` (`PARAM_LBL` → `AVISIT` + `at_sibling = "visit_overall"` + `at_sibling = "AVISIT"`) | a_summarize_ex_j + a_freq_j | Non-NA wrapper for worst shift | — | Two `at_sibling` hops at different depths (`visit_overall` at depth 2, `AVISIT` at depth 1); `rtables` auto-flips `AVISIT` `label_pos` to `"visible"` unless `label_pos = "hidden"` is explicit |
+| T30   | 4 Parallel Non-Nested Banners (`add_overall_col` + `split_cols_by`) | `ANY_TEAE` + SOC→PT | a_freq_j | — | Sort by `All Subjects` (`col_paths(tbl)[[1]]`) | `split_cols_by(..., nested = FALSE)` omits spanning headers; requires `add_overall_col("Banner") |> split_cols_by("VAR")` without row-binding data |
+| T31   | `AVISIT` → `split_cols_by_multivar(c("AVAL", "CHG"))` with `make_split_fun` + `restrict_facets` pruning `CFB` at `Baseline` | `PARAM` → `TRT01A` (`child_labels = "visible"`) → 2-row `cfun` → `analyze_colvars(indent_mod = 1L)` | — | 2-row `cfun` + 2-row `afun` reading `.spl_context$cur_col_id` | — | `drop_split_levels` fails on `split_cols_by_multivar`; `cfun` receives `.var = "TRT01A"` and must inspect `.spl_context$cur_col_id` for `"AVAL"` vs `"CHG"` |
+| T32   | `grouped_cols_w_diffs` (Spanning + Wald RD) | `SEX_LBL` (`child_labels = "visible"`) → 2-row mixed-RD `cfun` → 2 sibling sections (`at_sibling = "max_sev_sec"`) | a_freq_j (`denom_by = "SEX_LBL"`) | 2-row `cfun` (`riskdiff = FALSE` on row 1, `riskdiff = TRUE` on row 2) + pre-computed `MAX_SEV` | — | Mixed RD behavior across rows of a single `cfun`; `a_maxlev` fails with RD columns; `at_sibling` inside `SEX_LBL`; `denom_by = "SEX_LBL"` |
 
 ### Adversarial Design Principles
 
 These shells target the following categories of reasoning failure:
 
-1. **Anti-Pattern Attraction** (T22, T23, T25): The shell's visual structure strongly suggests a prohibited pattern (single split for dissimilar sections, factor fabrication for pre-specified rows, summarize_row_groups without analyze). The model must resist the visual suggestion and apply the structural rules.
+1. **Anti-Pattern Attraction** (T22, T23, T25, T30): The shell's visual structure strongly suggests a prohibited pattern (single split for dissimilar sections, factor fabrication for pre-specified rows, `summarize_row_groups` without `analyze`, or duplicating/row-binding `ADSL` and `ADAE` to fake parallel column banners). The model must resist the visual suggestion and apply the structural rules.
 
-2. **Counting Unit Confusion** (T21, T27): The shell requires two different counting mechanisms in the same table or section. The model must recognize that a single afun call cannot produce both.
+2. **Counting Unit & Multi-Row Content Table Interactions** (T21, T27, T28, T31, T32): The shell requires two different counting mechanisms or a multi-row-generating `cfun` (`summarize_row_groups`). When a `cfun` emits 2+ labeled rows instead of a single facet-named row, `child_labels = "default"` hides the parent facet header (`T28`, `T31`, `T32`), leaf rows require `indent_mod = 1L` (`T28`, `T31`), sorting on the parent split requires extracting row 1 of the 2-row `@content` table (`T28`), and under `split_cols_by_multivar()` the `cfun` must inspect `.spl_context$cur_col_id` because `.var` is the row-split variable (`T31`).
 
-3. **Nesting Escape** (T24): The shell requires multi-section structure inside an outer split. The model must use `at_sibling` instead of relying on default `nested = FALSE` behavior.
+3. **Non-Linear Tree Navigation & Multi-Depth `at_sibling`** (T24, T29, T32): The shell requires multi-section structure inside an outer split across one or two tree depths (`at_sibling = "visit_overall"` at depth 2 followed by `at_sibling = "AVISIT"` at depth 1 in `T29`; `at_sibling = "max_sev_sec"` inside `SEX_LBL` in `T32`), while avoiding `rtables`'s implicit flip of the targeted split's `label_pos` to `"visible"` by setting `label_pos = "hidden"` explicitly (`T29`).
 
-4. **Data Prep Completeness** (T23, T26): The shell requires derived variables that must exist in data prep, not inside afuns. The model must trace the data flow through filtering, joining, and factor level synchronization.
+4. **Data Prep Completeness** (T23, T26, T29, T32): The shell requires derived variables that must exist in data prep, not inside afuns (`WORST_ANRIND` across all post-baseline visits in `T29`; subject-level `MAX_SEV` to work around `a_maxlev`'s RD limitation in `T32`). The model must trace the data flow through filtering, joining, and factor level synchronization.
 
-5. **Over-Correction from Warnings** (T27): The model has been warned about a pitfall, and the shell presents a case where the "pitfall" behavior is actually correct. The model must distinguish the two cases rather than blindly applying the warning.
+5. **Over-Correction from Warnings & Asymmetric Trees** (T27, T31): The model must distinguish when defaults or warnings invert (`drop_split_levels` on ragged inner splits in `T27`; `make_split_fun` + `restrict_facets` instead of `drop_split_levels` to prune `CFB` under `Baseline` in `split_cols_by_multivar` in `T31`).

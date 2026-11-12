@@ -67,8 +67,10 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
  │
  ├─► Tier 3: Can the desired output be built by calling one or more EXISTING `afun`/`cfun`s
  │           and combining, selecting between, or tweaking their returned `RowsVerticalSection` objects?
- │     ├─► Different existing `afun`s in different columns (e.g., counts in Arm cols, custom stats in Diff cols, or counts in Arm cols, blank cells in Diff cols)?
- │     │     └──► Use Column-Conditional Dispatch Wrapper (Section 3.2).
+ │     ├─► Different column branches require different behaviors (e.g., summary stats in Arm cols, difference stats or blank cells in Diff cols)
+ │     │   that no single existing function handles natively?
+ │     │     └──► Decompose by column branch, run the `afun` selection/escalation pipeline independently per branch,
+ │     │          and combine with a Column-Conditional Dispatch Wrapper (Section 3.2).
  │     ├─► Multiple existing `afun`s stacked vertically in the same facet (e.g., Total Events + Unique Subjects)?
  │     │     └──► Use Vertical Stacking with `c(rvs1, rvs2)` (Section 3.3).
  │     ├─► Existing `afun` output needs post-hoc label, indent, format, or footnote tweaks?
@@ -195,9 +197,12 @@ A `RowsVerticalSection` wraps a list of `CellValue` (`rcell`) objects alongside 
 | **Row Footnotes** | Row | `row_footnotes(rvs)` / `row_footnotes(rvs) <- val` | Row-level `RefFootnote` objects attached to stub labels. |
 | **Cell Objects** | Cell | `row_cells(rvs)` / `cell_values(rvs)` / `rawvalues(rvs)` | Extract the underlying `rcell` (`CellValue`) objects or their raw values. Cell-level properties (`.aligns`, `.cell_footnotes`, `.stat_names`) live on individual cells. |
 
-### 3.2 Pattern 2A: Column-Conditional Dispatch Between Existing `afun`s
+### 3.2 Pattern 2A: Column-Conditional `afun` Behavior
 
-When different column branches require completely different existing `afun`s (and the combination is not already built into a single `junco` function like `a_freq_j(..., riskdiff = TRUE)`), write a lightweight dispatcher that inspects `.spl_context` and calls the appropriate existing `afun`:
+When different sets of column branches require different behavior:
+1. **First verify in `[select_afuns.md](./select_afuns.md)` that no single existing function handles both column sets natively** (e.g., `a_freq_j` with `riskdiff = TRUE` or `restr_columns = ...`, `a_freq_subcol_j`, `a_freq_combos_j`, or `a_patyrs_j` with `ref_path`).
+2. **Perform the full `afun`/`cfun` selection and escalation process (`[select_afuns.md](./select_afuns.md)` then this skill) independently for each required column-branch behavior** — always preferring existing `junco`/`tern` functions (Tier 1/2/4) for each branch before writing bespoke code.
+3. **Adapt the templates below** to write a lightweight dispatcher that inspects `.spl_context` and calls the appropriate per-branch `afun` for each column:
 
 ```r
 # Helper: robustly check column position via cur_col_split_val (preferred over cur_col_id)
@@ -212,6 +217,10 @@ in_diff_col <- function(spl_context) {
 # while alt_behavior_afun needs .ref_group, .in_ref_col, and .spl_context.
 # The wrapper must accept the UNION of both sets (Mandatory a/cfun Argument Invariant)
 # so that rtables populates all of them; each inner call receives only what it needs.
+# NOTE: Do NOT pass branch-specific .stats/.formats/.labels via shared `...` if
+# main_behavior_afun and alt_behavior_afun accept different stat names — instead, bake
+# per-branch .stats/.formats into main_behavior_afun and alt_behavior_afun via make_afun()
+# (Tier 2) before dispatching, or pass separate main_args / alt_args lists.
 col_dispatch_afun <- function(df, .var, .N_col, .ref_group, .in_ref_col, .spl_context, ...) {
   if (in_diff_col(.spl_context)) {
     alt_behavior_afun(df = df, .var = .var,
@@ -224,8 +233,32 @@ col_dispatch_afun <- function(df, .var, .N_col, .ref_group, .in_ref_col, .spl_co
 }
 ```
 
-#### Special-case: Blank Cells in Select Columns
-Emit cells with `NULL` or `""` values to create blank cells, e.g.:
+#### Reconciling Row Counts When Branch `afun`s Return Different Numbers of Rows
+When the independently selected `alt_behavior_afun` returns fewer rows than `main_behavior_afun` (for example, `main_behavior_afun` is `tern::a_summary` returning 3 rows: `n`, `mean_sd`, `median`, while `alt_behavior_afun` is `junco::a_diff_means` returning 1 row for the mean difference), **do not abandon the existing `alt_behavior_afun`**. Call it, extract its cell(s), and pad the remaining rows with `rcell(NULL)` (or blank specific rows of a multi-row `RowsVerticalSection` via `rvs[[i]] <- rcell(NULL)`):
+
+```r
+# Case A: Embed a 1-row existing afun (e.g., a_diff_means) into a k-row section
+if (in_diff_col(.spl_context)) {
+  diff_rvs <- alt_behavior_afun(
+    df = df, .var = .var, .df_row = .df_row, .spl_context = .spl_context, ...
+  )
+  in_rows(
+    n = rcell(NULL),
+    mean_sd = row_cells(diff_rvs)[[1]],
+    median = rcell(NULL)
+  )
+}
+
+# Case B: Blank specific rows of a k-row existing afun (e.g., blanking n_event in a_eair100_j diff cols)
+rvs <- main_behavior_afun(df = df, .var = .var, .spl_context = .spl_context, ...)
+if (in_diff_col(.spl_context)) {
+  rvs[[1]] <- rcell(NULL)
+}
+return(rvs)
+```
+
+#### Special-case: All Blank Cells in Select Columns
+Emit cells with `NULL` or `""` values to create blank cells across all $k$ rows in a column branch:
 ```r
 col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
   if (in_diff_col(.spl_context)) {
@@ -243,9 +276,7 @@ col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
 
 > [!IMPORTANT]
 > **Mandatory Row-Count Invariant Across Columns**:
-> For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns $k$ rows (e.g., `n` plus 4 factor levels = 5 rows), `alt_behavior_afun` must also return $k$ rows in the same order (using blank `rcell(NULL)` cells for rows where no comparison statistic applies, such as `n`).
-> **Mandatory Orthogonal Afun Selection For Column-Conditional Behavior**:
-> - When constructing the per-column behavior functions, independently re-apply the full afun selection-and-construction pipeline (select_afuns.md then this skill) from the beginning for each distinct behavior — preferring existing junco/tern functions before writing bespoke ones.
+> For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns $k$ rows (e.g., `n` plus 4 factor levels = 5 rows), the `alt_behavior_afun` branch must also return $k$ rows in the same order (using `rcell(NULL)` padding for rows where no comparison statistic applies, as shown above).
 
 ### 3.3 Pattern 2B: Vertical Stacking of Existing `afun`s (`c(rvs1, rvs2)`)
 
@@ -689,12 +720,12 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
 2. **Signature Union Rule Check**: Does the wrapper's `formals()` include every special argument that any inner function expects? Check via `names(formals(inner_fun))` against the special arguments reference in Section 5.2. Does the wrapper include any special argument that no inner function accepts? If so, remove it — forwarding it via `...` will cause "unused argument" errors. Pay special attention to confusingly similar names (`.alt_df` vs `.alt_df_full`, `.df_row` vs `df`).
 3. **Zero-Row / All-`NA` Safety**: What happens when `nrow(df) == 0` or `all(is.na(x))` in a sparse subgroup cell?
    - Does `in_rows()` still return the **exact same number of rows and row names** as a non-empty cell? (Never return a 0-row `in_rows()` with non-empty `.labels` or `.formats`, and never return fewer rows in an empty column than in populated columns).
-3. **Row-Count & Row-Name Consistency Across Columns**:
+4. **Row-Count & Row-Name Consistency Across Columns**:
    - Does every column branch in a column-conditional `afun` emit the exact same number of rows and identical `value_names()`?
    - Remember that the **left-most column** determines the stub labels (`value_labels()`), row formats, and `indent_mod()` for the entire row section.
-4. **Subject vs. Event Denominator Correctness**:
+5. **Subject vs. Event Denominator Correctness**:
    - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with `alt_counts_df = adsl`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
-5. **Dual `afun`/`cfun` Compatibility**:
+6. **Dual `afun`/`cfun` Compatibility**:
    - If the function is used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal parameter and assign `labelstr` to the returned row label?
 7. **No Precomputed Cell Values Via External State**:
    - Does the function compute all cell values from its inputs (`df`/`x`, `.spl_context`, `.N_col`, etc.) rather than reading precomputed analysis results from the enclosing or global environment? Function factories capturing configuration parameters and environment caching per Building Block 3 are permitted; smuggling in precomputed data or results is not.

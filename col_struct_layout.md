@@ -201,8 +201,9 @@ basic_table(
   top_level_section_div = NA_character_
 )
 ```
-- `add_colcounts(lyt, format = "(N=xx)")`: Turns on column counts at the current layout depth.
+- `add_colcounts(lyt, format = "(N=xx)")`: Turns on column counts at the current layout depth (set `format = "N=xx"` when the shell omits parentheses).
 - `append_topleft(lyt, newlines)`: Appends text lines to the top-left corner area (to the left of the column headers and above the row labels).
+- **Shell column-restraint rule**: Match the exact leaf columns in the shell header—never add any unrequested column not called for directly by the shell.
 
 ### 3.2 `split_cols_by()` (Categorical / Factor Splitting)
 ```r
@@ -553,11 +554,15 @@ Post-processing split function factory for multi-variable layouts (`split_cols_b
 
 ## 9. Common Pitfalls & Verification Checklist
 
-1. **Missing Spanning Variable on Tabulated Dataset**:
-   - `grouped_cols_w_diffs` requires the spanning variable (`colspan_trt`) to exist on **both** `df` and `alt_counts_df`. Always run `create_colspan_var` on both (or perform `right_join`/`inner_join` after calling it on `adsl`).
+1. **Missing or Unordered Spanning Variable (`" "` Sorting Before `"A"`)**:
+   - `grouped_cols_w_diffs` requires the spanning variable (`colspan_trt`) to exist on **both** `df` and `alt_counts_df` as a **factor with identical ordered levels**.
+   - **Never create a spanning variable with raw `ifelse(..., " ", "Active ...")` without wrapping it in `factor(..., levels = c(active_lbl, " "))`**: `create_colspan_map()` does not error on character input—instead, ASCII sorting puts `" "` (32) before `"A"` (65). Al`ways use `create_colspan_var()` on a single-observation-per-subject dataset (`alt_counts_df`, if it will differ from `df`) first, then join or synchronize onto `df` via `factor(..., levels = levels(...))` rather than running `droplevels()` independently on `df`.
 2. **Unintended Deep Nesting Instead of Parallel Banners**:
    - Chaining `split_cols_by` calls creates nested crossed subtrees. Use `nested = FALSE` or precede splits with `add_overall_col("Header")` for parallel banners.
-3. **Factor Level Hygiene**:
+3. **Unrequested `Total` / Extra Column Splits & Wrong `colcount_format`**:
+   - Do not add `add_overall_level("Total")` or an extra `split_cols_by("TRT01A")` unless present in the shell header.
+   - `basic_table()` defaults to `colcount_format = "(N=xx)"`; explicitly set `colcount_format = "N=xx"` whenever the shell displays `N=XXX` without parentheses.
+4. **Factor Level Hygiene**:
    - `split_cols_by` preserves all factor levels (producing `N=0` columns). Use `droplevels()` or `keep_split_levels()` when unobserved levels should be omitted.
    - **Post-filter and post-join repair**: Filtering `adsl` (e.g., removing `"Screen Failure"`) can leave stale factor levels or convert factors to character. After any filter, re-apply `factor()` to drop unused levels: `adsl <- adsl |> filter(...) |> mutate(TRT01A = factor(TRT01A))`. After joining `adsl` columns onto `df`, synchronize factor levels: `adae <- adae |> mutate(TRT01A = factor(TRT01A, levels = levels(adsl$TRT01A)))`. Mismatched levels between `df` and `alt_counts_df` cause `"All facets matched removal criteria"` or `create_colspan_map` errors.
 4. **`ref_path` Double-Injection with `grouped_cols_w_diffs()`**:

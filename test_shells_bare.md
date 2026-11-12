@@ -4,7 +4,7 @@ Use the pharmaverseadamjnj R package data unless otherwise specified.
 
 ---
 
-## Shell T01: Demographics with Stacked Continuous + Categorical Sections
+## Shell T01: Demographics and Baseline Characteristics
 
 ```
 TSFDEM01: Demographics and Baseline Characteristics; Safety Analysis Set
@@ -37,7 +37,7 @@ Programming Notes:
 
 ---
 
-## Shell T02: AE Table with Subgroup Row Split and Conditioned Denominators
+## Shell T02: Subjects With TEAEs by Sex
 
 ```
 TSFAE-SUBGRP: Subjects With TEAEs by Sex; Safety Analysis Set
@@ -68,7 +68,7 @@ Programming Notes:
 
 ---
 
-## Shell T03: Disposition Table with Selective Drill-Down
+## Shell T03: Subject Disposition
 
 ```
 TSFDS01: Subject Disposition; Safety Analysis Set
@@ -125,7 +125,7 @@ Programming Notes:
 
 ---
 
-## Shell T05: Vital Signs with 3-Column Layout and Difference in Mean Change
+## Shell T05: Vital Signs - Observed Values and Change from Baseline
 
 ```
 TSFVS01: Vital Signs - Observed Values and Change from Baseline; Safety Analysis Set
@@ -215,7 +215,7 @@ Programming Notes:
 
 ---
 
-## Shell T08: Multi-Section Stacked Table with page_by
+## Shell T08: Laboratory Parameters by Visit
 
 ```
 TSFLAB-PARAM: Laboratory Parameters by Visit; Full Analysis Set
@@ -254,7 +254,7 @@ Programming Notes:
 
 ---
 
-## Shell T09: AE Table with "Any Grade" Combo Level + Grade Breakdown
+## Shell T09: TEAEs by SOC, PT, and Maximum CTC Grade
 
 ```
 TSFAE-GRADE: TEAEs by System Organ Class, Preferred Term, and CTC Grade; Safety Analysis Set
@@ -281,7 +281,7 @@ Programming Notes:
 
 ---
 
-## Shell T10: Concomitant Medications with 3-Level Hierarchy and Overall Row
+## Shell T10: Concomitant Medications by ATC Class and Preferred Name
 
 ```
 TSFCM01: Concomitant Medications by ATC Class and Preferred Name; Safety Analysis Set
@@ -309,7 +309,7 @@ Programming Notes:
 
 ---
 
-## Shell T11: Arms Subdivided by Subgroups with Within-Arm Totals
+## Shell T11: Baseline Characteristics by Treatment and Sex
 
 ```
 TSFDEM-SUBGRP: Baseline Characteristics by Treatment and Sex; Full Analysis Set
@@ -335,7 +335,7 @@ Programming Notes:
 
 ---
 
-## Shell T12: Non-Mutually-Exclusive AE Subsets (All AEs vs Related AEs)
+## Shell T12: TEAEs — All vs Drug-Related
 
 ```
 TSFAE-RELATED: TEAEs - All vs Drug-Related; Safety Analysis Set
@@ -360,7 +360,7 @@ Programming Notes:
 
 ---
 
-## Shell T13: Statistics-in-Columns Layout
+## Shell T13: Vital Signs Summary by Visit
 
 ```
 TSFVS-COLS: Vital Signs Summary Statistics in Columns; Safety Analysis Set
@@ -389,7 +389,7 @@ Programming Notes:
 
 ---
 
-## Shell T14: Pooled/Combined Treatment Arms with ANCOVA
+## Shell T14: Change from Baseline in Primary Endpoint by Visit
 
 ```
 TSFEFF-ANCOVA: Change from Baseline in Primary Endpoint by Visit; Full Analysis Set
@@ -510,7 +510,7 @@ Programming Notes:
 
 ---
 
-## Shell T18: AE Summary with Blank Spanning Label Between Two Named Spans
+## Shell T18: TEAEs by Treatment Group and Severity
 
 ```
 TSFAE-3SPAN: TEAEs by Treatment Group and Severity; Safety Analysis Set
@@ -539,7 +539,7 @@ Programming Notes:
 
 ---
 
-## Shell T19: Total Column Placement Ambiguity — Total UNDER the Spanning Label
+## Shell T19: TEAEs Summary with Treatment Group Total
 
 ```
 TSFAE-TOTUNDER: TEAEs Summary; Safety Analysis Set
@@ -562,7 +562,7 @@ Programming Notes:
 
 ---
 
-## Shell T20: Total Column Placement Ambiguity — Total OUTSIDE the Spanning Label
+## Shell T20: TEAEs Summary with Overall Total
 
 ```
 TSFAE-TOTOUT: TEAEs Summary; Safety Analysis Set
@@ -585,7 +585,7 @@ Programming Notes:
 
 ---
 
-## Shell T21: AE Summary with Event Counts AND Subject Counts in Same Section
+## Shell T21: Overall Adverse Event Summary
 
 ```
 TSFAE-DUAL: Overall AE Summary; Safety Analysis Set
@@ -614,7 +614,7 @@ Programming Notes:
 
 ---
 
-## Shell T22: Multi-Section Table Where Sections Have Dissimilar Row Structures
+## Shell T22: AE Summary by Incidence, Maximum Severity, and SOC/PT
 
 ```
 TSFAE-MIXED: AE Summary with Heterogeneous Sections; Safety Analysis Set
@@ -647,7 +647,7 @@ Programming Notes:
 
 ---
 
-## Shell T23: Table Where Row Labels Look Like Factor Levels But Are Actually Pre-Specified Sections
+## Shell T23: AE Summary by Category
 
 ```
 TSFAE-FLAT: AE Summary by Category; Safety Analysis Set
@@ -669,19 +669,11 @@ Note: Subjects are counted once per category.
 ```
 
 Programming Notes:
-1. Source dataset: ADAE with alt_counts_df = ADSL.
-2. Each row requires a different filter condition on ADAE:
-   - "Any TEAE": TRTEMFL == "Y"
-   - "Any serious TEAE": AESER == "Y"
-   - "Any TEAE leading to death": AESDTH == "Y"
-   - "Any TEAE leading to discontinuation": AEACN == "DRUG WITHDRAWN" (or equivalent)
-   - "Any drug-related TEAE": AEREL == "RELATED" (or equivalent)
-   - "Any serious drug-related TEAE": AESER == "Y" & AEREL == "RELATED"
-3. Percentages based on column N from ADSL.
+3. Percentages based on subjects randomized to each arm.
 
 ---
 
-## Shell T24: Table with at_sibling Anchoring Under an Outer Subgroup Split
+## Shell T24: Efficacy Summary by Subgroup
 
 ```
 TSFEFF-SUBGRP: Efficacy Summary by Subgroup; Full Analysis Set
@@ -733,11 +725,11 @@ Stratum B
 ```
 
 Programming Notes:
-1. Source dataset: Efficacy analysis dataset with alt_counts_df = ADSL.
+1. Source dataset: Efficacy analysis dataset
 
 ---
 
-## Shell T25: Table Where summarize_row_groups Appears to Be the Only Content
+## Shell T25: Analysis Population Summary
 
 ```
 TSFPOP: Analysis Population Summary; Safety Analysis Set
@@ -756,13 +748,11 @@ Note: Percentages are based on the number of randomized subjects.
 ```
 
 Programming Notes:
-1. Source dataset: ADSL.
-2. Each row is a count of subjects meeting a criterion (RANDFL == "Y", SAFFL == "Y", EOSSTT == "COMPLETED", EOSSTT == "DISCONTINUED").
-3. Percentages are based on the number of randomized subjects.
+1. Percentages are based on the number of randomized subjects.
 
 ---
 
-## Shell T26: Table with Derived Variable Needed in Both df and alt_counts_df
+## Shell T26: Drug-Related TEAEs by SOC and PT
 
 ```
 TSFAE-RELFLAG: Drug-Related TEAEs by SOC and PT; Safety Analysis Set
@@ -784,12 +774,11 @@ Percentages are based on the number of subjects in each treatment group (not the
 
 Programming Notes:
 1. Source dataset: ADAE filtered to drug-related AEs only (AEREL == "RELATED"), with alt_counts_df = ADSL (unfiltered, full safety population).
-2. Percentages use the FULL arm N from ADSL, NOT the number of subjects with drug-related AEs.
-3. All column split variables must exist on both the filtered ADAE and ADSL with identical factor levels.
+2. Percentages are out of total arm patient count.
 
 ---
 
-## Shell T27: Table Where drop_split_levels on Inner Split Creates Ragged Structure
+## Shell T27: TEAEs by SOC, PT, and Severity
 
 ```
 TSFAE-RAGGED: TEAEs by SOC, PT, and Severity; Safety Analysis Set
@@ -814,6 +803,221 @@ Each subject counted once at maximum severity per PT.
 ```
 
 Programming Notes:
-1. Source dataset: ADAE with alt_counts_df = ADSL.
-2. Each subject counted once at their maximum severity per PT.
-3. No risk difference or comparison columns.
+1. Each subject counted once at their maximum severity per PT.
+
+---
+
+## Shell T28: TEAEs by SOC and PT
+
+```
+TSFAE-MULTICFUN: TEAEs by SOC (with Dual Subject/Event Summaries) and PT; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————
+System Organ Class                                                                                 
+  SOC Summary                                Xanomeline Low Dose   Xanomeline High Dose    Placebo 
+    Preferred Term                                  N=xx                   N=xx             N=xx   
+———————————————————————————————————————————————————————————————————————————————————————————————————
+SOC1                                                                                               
+  Subjects with >=1 TEAE                         xx (xx.x%)             xx (xx.x%)       xx (xx.x%)
+  Total number of TEAEs                              xx                     xx               xx    
+      PT1                                        xx (xx.x%)             xx (xx.x%)       xx (xx.x%)
+SOC2                                                                                               
+  Subjects with >=1 TEAE                         xx (xx.x%)             xx (xx.x%)       xx (xx.x%)
+  Total number of TEAEs                              xx                     xx               xx    
+      PT1                                        xx (xx.x%)             xx (xx.x%)       xx (xx.x%)
+———————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Each SOC displays unique subjects with >=1 TEAE and total TEAE occurrences, followed by preferred terms (unique subjects).
+```
+
+Programming Notes:
+1. System Organ Classes of interest defined by study lead.
+2. Percentages are out of safety-evaluated patients within each arm.
+2. Both SOCs and Preferred Terms within each SOC are sorted in descending order of unique subject incidence in the first treatment column, with alphabetical tie-breaking.
+
+---
+
+## Shell T29: Laboratory Summary by Visit, Sex Subgroup, and Post-Baseline Worst Status
+
+```
+TSFLAB-ATSIB2D: Laboratory Summary by Visit, Sex Subgroup, and Post-Baseline Shift; Safety Analysis Set
+
+——————————————————————————————————————————————————————————————————————————————————————————————
+                                      Xanomeline Low Dose   Xanomeline High Dose     Placebo  
+                                             N=xx                   N=xx              N=xx    
+——————————————————————————————————————————————————————————————————————————————————————————————
+PARAM1                                                                
+  Baseline                                                                                    
+    N                                         xx                     xx                xx     
+    Mean (SD)                            xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+      Male                                                                                    
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+  Cycle 02                                                                                    
+    N                                         xx                     xx                xx     
+    Mean (SD)                            xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+      Male                                                                                    
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+  Post-Baseline Worst Status, n (%)                                                           
+    LOW                                   xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+    NORMAL                                xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+    HIGH                                  xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+PARAM2                                                             
+  Baseline                                                                                    
+    N                                         xx                     xx                xx     
+    Mean (SD)                            xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+      Male                                                                                    
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+  Cycle 02                                                                                    
+    N                                         xx                     xx                xx     
+    Mean (SD)                            xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+    By Sex                                                                                    
+      Female                                                                                  
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+      Male                                                                                    
+        Mean (SD)                        xx.x (xx.x)            xx.x (xx.x)       xx.x (xx.x) 
+  Post-Baseline Worst Status, n (%)                                                           
+    LOW                                   xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+    NORMAL                                xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+    HIGH                                  xx (xx.x%)            xx (xx.x%)        xx (xx.x%)  
+——————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Each visit displays overall summary statistics followed by sex-specific Mean (SD).
+Post-Baseline Worst Reference Range Status summarizes each subject once per parameter below all visits.
+```
+
+Programming Notes:
+1. Patients evaluated for safety.
+2. For Post-Baseline Worst Status, each subject is summarized once per parameter at their worst post-baseline assessment across all post-baseline records (ordered `LOW < NORMAL < HIGH`), with percentages based on the safety population count in each treatment arm.
+
+---
+
+## Shell T30: TEAEs by Treatment, Sex, and Age Group Banners
+
+```
+TSFAE-BANNER: TEAEs by Parallel Treatment, Sex, and Age Group Banners; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                             Treatment Group                            Sex Subgroup                 Age Group (Years)         
+                                          All Subjects   Xanomeline Low Dose   Xanomeline High Dose    Placebo       Female        Male         <65      65 to <75      >=75   
+                                              N=xx              N=xx                   N=xx              N=xx         N=xx         N=xx         N=xx        N=xx         N=xx  
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Subjects with >=1 TEAE in Selected SOCs    xx (xx.x%)        xx (xx.x%)             xx (xx.x%)        xx (xx.x%)   xx (xx.x%)   xx (xx.x%)  xx (xx.x%)  xx (xx.x%)  xx (xx.x%)
+SOC1                                       xx (xx.x%)        xx (xx.x%)             xx (xx.x%)        xx (xx.x%)   xx (xx.x%)   xx (xx.x%)  xx (xx.x%)  xx (xx.x%)  xx (xx.x%)
+  PT1                                      xx (xx.x%)        xx (xx.x%)             xx (xx.x%)        xx (xx.x%)   xx (xx.x%)   xx (xx.x%)  xx (xx.x%)  xx (xx.x%)  xx (xx.x%)
+SOC2                                       xx (xx.x%)        xx (xx.x%)             xx (xx.x%)        xx (xx.x%)   xx (xx.x%)   xx (xx.x%)  xx (xx.x%)  xx (xx.x%)  xx (xx.x%)
+  PT1                                      xx (xx.x%)        xx (xx.x%)             xx (xx.x%)        xx (xx.x%)   xx (xx.x%)   xx (xx.x%)  xx (xx.x%)  xx (xx.x%)  xx (xx.x%)
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Columns represent parallel non-nested banners over the same Safety Analysis Set.
+Percentages are based on column N within each banner facet.
+```
+
+Programming Notes:
+1. Percents are among all patients evaluated for safety.
+2. Treatment emergent aes defined by the study lead.
+3. SOCs and Preferred Terms are sorted in descending order of subject count in the `All Subjects` column.
+
+---
+
+## Shell T31: Vital Signs Across Longitudinal Visits
+
+```
+TSFVS-LONGCB: Vital Signs Across Longitudinal Visit Columns with Conditional CFB; Safety Analysis Set
+
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+Parameter                           Baseline              Cycle 02                     Cycle 04         
+  Treatment Group                   Observed       Observed         CFB         Observed         CFB    
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+PARAM1                                                                         
+  Xanomeline Low Dose                                                                                   
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+  Xanomeline High Dose                                                                                  
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+  Placebo                                                                                               
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+PARAM2                                                                        
+  Xanomeline Low Dose                                                                                   
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+  Xanomeline High Dose                                                                                  
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+  Placebo                                                                                               
+    n                                  xx             xx            xx             xx            xx     
+    Min, Max                       xx.x, xx.x     xx.x, xx.x    xx.x, xx.x     xx.x, xx.x    xx.x, xx.x 
+        Mean (SD)                 xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)   xx.x (xx.x) 
+        Median                        xx.x           xx.x          xx.x           xx.x          xx.x    
+————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Baseline displays Observed values only; post-baseline visits display both Observed and Change from Baseline (CFB).
+Each treatment group header summarizes n and Min, Max via a multi-row group summary.
+```
+
+Programming Notes:
+1. Safety population
+---
+
+## Shell T32: Subgroup TEAEs with Severity and Discontinuation SOCs
+
+```
+TSFAE-SUBGRP-MIXED: Subgroup TEAEs with Dual-Row Subgroup Header, Severity, and Discontinuation SOCs; Safety Analysis Set
+
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                                        Active Study Agent                                                 Risk Difference (%) (95% CI)                  
+                                                                            Xanomeline Low Dose   Xanomeline High Dose      Placebo      Xanomeline Low Dose vs Placebo   Xanomeline High Dose vs Placebo
+                                                                                   N=xx                   N=xx               N=xx                     N=xx                             N=xx              
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Female                                                                                                                                                                                                   
+  Subjects in subgroup, n                                                            xx                      xx                  xx                                                                        
+  Subjects with >=1 TEAE, n (%)                                                xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+    TEAEs by Maximum Severity                                                                                                                                                                            
+      Mild                                                                     xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+      Moderate                                                                 xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+      Severe                                                                   xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+    TEAEs Leading to Discontinuation by SOC                                                                                                                                                              
+      SOC1                                                                     xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+Male                                                                                                                                                                                                     
+  Subjects in subgroup, n                                                            xx                      xx                  xx                                                                        
+  Subjects with >=1 TEAE, n (%)                                                xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+    TEAEs by Maximum Severity                                                                                                                                                                            
+      Mild                                                                     xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+      Moderate                                                                 xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+      Severe                                                                   xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+    TEAEs Leading to Discontinuation by SOC                                                                                                                                                              
+      SOC1                                                                     xx / xx (xx.x%)        xx / xx (xx.x%)      xx / xx (xx.x%)       xx.x (xx.x - xx.x)                xx.x (xx.x - xx.x)      
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Subgroup header displays sex-specific N (blank in Risk Difference columns) and overall TEAE incidence.
+Severity and Discontinuation SOC sections use sex-specific denominators within each treatment group.
+```
+
+Programming Notes:
+1. Percentages for TEAE incidence, maximum severity, and discontinuation by SOC use sex-specific safety population denominators within each treatment arm.
+2. Treatment-emergent AEs and AEs leading to study drug discontinuation are defined by the study lead.
+3. Risk differences and 95% confidence intervals use the Wald method.
+4. For TEAEs by Maximum Severity, each subject is counted once at their maximum severity within each sex subgroup (`Mild < Moderate < Severe`), with all three severity levels displayed.
+5. Observed SOCs under TEAEs Leading to Discontinuation by SOC are displayed in alphabetical order within each sex subgroup.
+6. Count-percent cells with zero counts should be displayed as "0".
+
