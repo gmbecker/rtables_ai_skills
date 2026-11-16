@@ -258,7 +258,7 @@ This document describes the rationale behind each test shell in `test_shells_bar
 
 **Select Afuns — Dynamic Decimal Precision**:
 - Tests `fmt_spec_df_d` and `formats_var = "fmt_d"` for parameter-specific precision.
-- Tests Pattern B from select_afuns.md Section 6.2.
+- Tests Pattern B from select_afuns.md Section 5.2.
 
 **Orchestrator Stage 1 — Record Granularity**:
 - ADLB has multiple rows per subject per visit per parameter. The model must verify this and ensure that N counts use subject deduplication if needed.

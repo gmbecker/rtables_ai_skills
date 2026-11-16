@@ -207,7 +207,7 @@ Once you have identified the correct `afun`/`cfun` from the decision matrix abov
 
 **Escalation rule**: After selecting a function from the decision matrix, **activate the linked expert skill** from the table above for detailed parameterization and usage guidance.
 
-> Note: This escalation is independent of the `[custom_afuns.md](./custom_afuns.md)` escalation, which applies only when **no** existing function satisfies the requirement (see Section 8, item 5).
+> Note: This escalation is independent of the `[custom_afuns.md](./custom_afuns.md)` escalation, which applies only when **no** existing function satisfies the requirement (see Section 7, item 5).
 
 ---
 
@@ -273,182 +273,9 @@ Alphabetical lookup from function name to its expert skill document. For full pa
 > - `junco::a_coxph_hr` was deprecated in `junco 0.1.7` (`lifecycle::deprecate_stop`). Use **`tern::coxph_pairwise()`** / `tern:::a_coxph_pairwise()` instead.
 > - `junco::a_kaplan_meier` was deprecated in `junco 0.1.7` (`lifecycle::deprecate_stop`). Use **`tern::a_surv_time()`** instead.
 
----
+## 5. Cross-Cutting Configuration Mechanisms in `junco`
 
-## 5. Detailed Selection & Configuration Guide by Domain
-
-### 5.1 Frequency, Categorical Counts, Subgroups & Multitiered Layouts
-
-#### 1. `a_freq_j` and `a_freq_j_with_exclude`
-`a_freq_j` is the primary workhorse in `junco` for unique subject counts and percentages by levels of a categorical variable (e.g., AE, concomitant medication, medical history, disposition, and demographic tables).
-- **Dual Role**: Use in `analyze(..., afun = a_freq_j)` for category/term rows AND in `summarize_row_groups(..., cfun = a_freq_j)` for group header rows (e.g., System Organ Class `AEBODSYS`, subgroup headers, or overall event flags).
-- **Selecting `.stats`**:
-  - `"count_unique_denom_fraction"` *(default)*: `xx / xx (xx.x%)` — unique subjects, denominator, and percentage. Standard for subgroup tables where the denominator varies by row group.
-  - `"count_unique_fraction"`: `xx (xx.x%)` — unique subjects and percentage. Standard for main AE / ConMed tables where `(N=xx)` is in the column header.
-  - `"count_unique"`: `xx` — unique subject count only.
-  - `"count"`: `xx` — raw event/record count (not deduplicated by subject).
-  - `"unique_fraction"`: `(xx.x%)` — percentage of unique subjects only.
-  - `"n_df"`, `"n_altdf"`, `"n_rowdf"`, `"n_parentdf"`, `"denom"`: standalone count/denominator values (e.g., `.stats = "n_altdf"` on a subgroup header row to display subgroup sample sizes `N`).
-- **Selecting `denom` and `denom_by`**:
-  - `denom = "N_col"` *(default)* or `denom = "n_altdf"`: divides by the column subject count from `alt_counts_df`.
-  - `denom = "n_altdf", denom_by = "SEX"`: divides by the number of subjects in `alt_counts_df` matching both the current column AND the current `SEX` row split level.
-  - `denom = "n_df"`: divides by records in the current `(row, col)` cell slice.
-  - `denom = "n_rowdf"` / `"n_parentdf"` / `"N_colgroup"`: divides by row total, parent row total, or column group total.
-- **Configuring Risk Differences (`riskdiff = TRUE`)**:
-  - Automatically detects risk difference columns via `ref_path` (e.g., `c("colspan_trt", " ", "TRT01A", "Placebo")`).
-  - In main arm columns, displays the requested `.stats`; in risk difference columns, blanks out non-comparative stats and displays the percentage point difference and CI (`xx.x (xx.x, xx.x)`).
-  - Supports 11 `method` options: `"wald"`, `"waldcc"`, `"cmh"`, `"ha"`, `"newcombe"`, `"newcombecc"`, `"strat_newcombe"`, `"strat_newcombecc"`, `"cmh_sato"`, `"cmh_mn"`, `"uncond_exact_diff"`.
-- **Column Restriction (`restr_columns`)**:
-  - A KEEP list of leaf column labels: columns whose leaf label (case-insensitive match on `tail(.spl_context$cur_col_split_val, 1)`) is not in `restr_columns` are blanked out. Use when a single `analyze()` or `summarize_row_groups()` call should only populate a subset of columns (e.g., `restr_columns = c("N")` to populate only the `N` column in a shift table layout while blanking baseline-level and Total columns).
-  - Distinct from `riskdiff`: `riskdiff` toggles behavior between arm columns and risk-difference columns; `restr_columns` restricts output to an arbitrary subset of leaf columns by name.
-> [!WARNING]
-> **`a_freq_j` Enumerates All Levels of `.var`**
-> `a_freq_j` always produces one row per level of the **analyzed variable** (`.var` — the variable named in `analyze(vars, ...)`) after applying `val`, `drop_levels`, `excl_levels`, and `new_levels` filtering. Passing a high-cardinality variable like `USUBJID` as `.var` (i.e., `analyze("USUBJID", afun = a_freq_j, ...)`) produces one row per subject — not a single summary count. (This is distinct from the `id` parameter, which controls internal subject deduplication and correctly defaults to `"USUBJID"`.) When a single-row unique-subject count is needed (e.g., "Subjects with evaluable samples," "Number of subjects with ≥1 AE"), always analyze a **binary flag variable** (e.g., `TRTEMFL`, `EVALFL`) as `.var` with `val = "Y"` and `label = "..."`. Derive the flag in data prep if it does not already exist in the dataset.
-
-- **Filtering, Level Manipulation & Relabeling**:
-  - **⚠️ Data scope constraint for derived variables**: `a_freq_j` internally references `.df_row` (for level enumeration and row-facet denominators) and `.alt_df_full` (for `denom = "n_altdf"` subject counts). Any variable passed as `.var` — or referenced by `denom_by`, `val`, `excl_levels`, or `new_levels` — must exist in the dataset(s) passed to `build_table()`, not just in a `df` slice mutated inside a custom afun. Variables created via `mutate()` inside an afun exist only in the `df` column-slice; they are invisible to `.df_row`, `.alt_df_full`, `.spl_context$full_parent_df`, and all other data.frame special arguments. Always pre-compute derived variables (flags, recoded factors, computed numerics) in data prep on both `df` and `alt_counts_df` when needed. See Building Block 7 in `[custom_afuns.md](./custom_afuns.md)`.
-  - Single-flag summary row: `analyze("TRTEMFL", afun = a_freq_j, extra_args = list(val = "Y", label = "Subjects with >=1 AE", ...))` tabulates only level `"Y"` and labels the row `"Subjects with >=1 AE"`.
-  - Level control: `drop_levels`, `excl_levels`, `new_levels`, `new_levels_after`, `addstr2levs`.
-  - `label_map`: dataframe supporting 4 translation modes (single-variable, multi-variable, conditional on row split, or conditional multi-variable).
-- **Excluding Specific Row Facets (`a_freq_j_with_exclude`)**:
-  - Pass `exclude_levels = list(SPLIT_VAR = c("Level1", "Level2"))` in `extra_args` to suppress rows for specific row split levels.
-
-#### 2. `a_freq_combos_j` (Cumulative / Cycle Period Columns)
-Select `a_freq_combos_j` when columns represent time intervals or treatment cycles paired with cumulative/total period columns created via `combosdf`:
-- Uses `filter_var` and `flag_var` to prevent double-counting subjects across individual period facets while `do_not_filter` preserves cumulative counts in overall/total facets.
-
-#### 3. `a_freq_subcol_j` (Conditional Sub-Column Event Filtering)
-Select `a_freq_subcol_j` when each treatment arm is subdivided into sub-columns where specific sub-columns represent restricted subsets of events (e.g., `"All AEs"`, `"Drug-Related AEs"`, `"Serious AEs"`):
-- Inspects the column path for `subcol_split` and filters `df` to `df[[subcol_var]] == subcol_val` only inside matching sub-columns.
-
-#### 4. `a_freq_resp_var_j` (Binary `"Y"`/`"N"` Response Across Categories)
-Select `a_freq_resp_var_j` when summarizing a binary `"Y"`/`"N"` flag variable (`resp_var`, e.g., `"TRTEMFL"`) across the levels of a categorical variable passed to `analyze()` (e.g., `SEX` or `AGEGR1`), displaying `xx / xx (xx.x%)` in arm columns and optional risk differences (`riskdiff = TRUE`) in difference columns.
-
-#### 5. `a_maxlev` (Worst / Maximum Ordered Factor Level per Subject)
-Select `a_maxlev` when each subject must be counted only once at their highest level of an ordered factor (e.g., maximum CTCAE toxicity grade `AETOXGR` or worst AE severity `AESEV`):
-- **As a `cfun` in `summarize_row_groups()`**: Pass `any_level = TRUE` (and optionally `any_level_exclude = "Missing"`) to count unique subjects with any non-missing grade in that organ class/term.
-- **As an `afun` in `analyze()`**: Pass `any_level = FALSE` to tabulate the distribution of each subject's worst grade.
-- **⚠️ Does not support difference columns**: `a_maxlev` does not support `riskdiff`/`ref_path` and cannot be used directly in layouts with difference columns (`grouped_cols_w_diffs` or manual risk-difference column branches). It will throw `"'subset' must be logical"` inside diff columns. Two workaround patterns are available:
-  - **Workaround 1 (Pre-computed factor + `a_freq_j`)**: Pre-compute the worst grade as a factor variable in data prep and use `a_freq_j` on the factor levels. This works seamlessly with `riskdiff = TRUE`.
-  - **Workaround 2 (Column-dispatch wrapper)**: Wrap `a_maxlev` in a column-conditional dispatch afun (Pattern 2A from `[custom_afuns.md](./custom_afuns.md)`) that calls `a_maxlev` in treatment columns and emits blank cells in difference columns.
-
-#### 6. `a_two_tier` and `a_three_tier` (Selective Drill-Down Without Structural Sub-Splits)
-Select `a_two_tier` or `a_three_tier` when a shell displays categories of an outer variable (`.var`), and **only selected categories** (`drill_down_levs`) expand into indented detail breakdown rows (`inner_var`), such as Disposition tables expanding `"DISCONTINUED"` into discontinuation reasons (`DCSREAS`) while `"COMPLETED"` remains a single line:
-- `a_two_tier`: Takes `inner_var`, `drill_down_levs`, `use_all_levels`, `grp_fun` (default `a_freq_j`), and `detail_fun` (default `a_freq_j`).
-- `a_three_tier`: Extends to 3 nested levels (`inner_var1`, `inner_var2`).
-
----
-
-### 5.2 Exposure, Patient-Years, and Incidence Rates (EAIR)
-
-#### 1. `a_eair100_j` and `a_eair_strat_j`
-Select `a_eair100_j` for unstratified Exposure-Adjusted Incidence Rates (or `a_eair_strat_j` for study-size weighted stratified EAIR across `strata`):
-- **Rate Calculation**: $\text{EAIR} = \text{num\_p\_year} \times \frac{n_{\text{event}}}{\text{total person-years}}$ (default `num_p_year = 100`).
-- **Time-at-Risk Logic**: Subjects without the event contribute `fup_var` (in years). Subjects with the event (`occ_var == "Y"`) contribute time to first event (`occ_dy / 365.25`).
-- **Supported `.stats`**: `eair` *(default)*, `n_event`, `person_years`, `n_eair`, `eair_ci`, `eair_est_ci`, `eair_n`, `eair_n_py`, and in difference columns: `eair_diff_est_ci`, `eair_diff_est`, `eair_diff_ci` (or `*_strat_*` equivalents in `a_eair_strat_j`).
-- **CI Methods**:
-  - `conf_type_eair`: `"exact"` (Poisson exact), `"normal"`, `"normal_log"`, `"byar"`.
-  - `conf_type_diff`: `"wald"`, `"waldcc"`, `"mn"` (Miettinen-Nurminen score), `"scas"` (skewness-corrected asymptotic score).
-
-#### 2. `a_patyrs_j`
-Select `a_patyrs_j` to display a `"Total patient-years"` summary row (summing `.var` across unique subjects `id` from `source = "alt_df"` or `"df"`). Passing `ref_path` automatically blanks out the cell in risk difference columns.
-
-#### 3. `a_summarize_ex_j`
-Select `a_summarize_ex_j` for Study Drug Exposure tables (duration of exposure in days/months, total dose, dose intensity):
-- Default `.stats`: `mean_sd`, `median`, `range`, `quantiles`, `total_subject_years`; in difference columns (`comp_btw_group = TRUE`): `diff_mean_est_ci`.
-- Supports unit conversion via `daysconv` (`1` for days, `30.4375` for months) and between-group comparisons via two-sample t-test (`ancova = FALSE`) or ANCOVA (`ancova = TRUE`).
-
----
-
-### 5.3 Continuous Variables, Difference in Means, ANCOVA, MMRM & Summaries
-
-#### 1. `tern::a_summary`, `a_summary_j_with_exclude`, `a_summary_subset`, and `c_summary_subset_label`
-- **`tern::a_summary`**: Standard descriptive summary function for continuous (`n`, `sum`, `mean`, `sd`, `se`, `mean_sd`, `mean_se`, `mean_ci`, `median`, `mad`, `median_ci`, `quantiles`, `iqr`, `range`, `min`, `max`, `median_range`, `cv`, `geom_mean`, `geom_sd`, `geom_mean_sd`, `geom_mean_ci`, `geom_cv`, `mean_diff_with_ci`) and categorical (`count`, `count_fraction`, `n_blq`) variables.
-- **`a_summary_j_with_exclude`**: Select when you need `tern::a_summary` but must suppress output for specific row split levels (`exclude_levels = list(AVISIT = "BASELINE")`).
-- **`a_summary_subset` / `c_summary_subset_label`**: Select when the summary must be computed on a filtered subset of `df` within each cell via `filter_expr = expression(...)` (with optional `formats_var` for dynamic precision, or `label` prepending in `c_summary_subset_label`).
-
-#### 2. `column_stats` (Statistics-in-Columns Layout)
-Select `column_stats` when summary statistics (`N`, `Mean`, `SD`, `SE`, `Med`, `Min`, `Max`, `Base Mean (SD)`) are arranged **horizontally as columns** under multi-variable headers (`AVAL`, `BASE`, `CHG`) while visits (`AVISIT`) are arranged **vertically as rows**:
-- Must be paired with `split_cols_by_multivar(...) |> split_cols_by("STUDYID", split_fun = make_split_fun(post = list(stats_in_cols_setup())))`.
-- Automatically blanks out `BASE` and `CHG` statistics on baseline/screening visits specified in `exclude_visits = toupper(c("Baseline", "Screening"))`.
-- Supports parameter-specific decimal precision or significant figures via `formats_var = "fmt_d"`.
-
-#### 3. `a_diff_means`
-Select `a_diff_means` to compute independent two-sample t-test (`paired = FALSE`) or paired t-test (`paired = TRUE, paired_by = "USUBJID"`) mean differences, SEs, and CIs against `ref_path`.
-
-#### 4. `a_summarize_aval_chg_diff_j` (3-Column Lab / Vital Signs Layout)
-Select `a_summarize_aval_chg_diff_j` when each treatment arm has 3 sub-columns created by `split_cols_by_multivar(c("AVAL", "AVAL", "CHG"))`:
-1. Column 1 (`col1`): `n/N (%)` (`count_denom_frac`, `count_frac`, or `count`).
-2. Column 2 (`col23` first): Raw/Visit Mean (95% CI) (`mean_ci_3d`).
-3. Column 3 (`col23` second): Change from Baseline Mean (95% CI) (`mean_ci_3d`) — automatically blank when `CHG` is `NA` (e.g., at `SCREENING`/`BASELINE`).
-4. Optional Difference Columns (`coldiff`, when `comp_btw_group = TRUE`): Difference in Mean Change (95% CI) (`mean_diff_with_ci`), blanked out at `SCREENING`/`BASELINE`.
-- Pass `ancova = FALSE` for descriptive arithmetic means + t-test differences, or `ancova = TRUE` for ANCOVA LS means + contrasts.
-- Set `child_labels = "hidden"` on `split_rows_by("AVISIT", ...)` and pass a dummy variable (e.g., `"STUDYID"`) to `analyze("STUDYID", afun = a_summarize_aval_chg_diff_j, extra_args = ...)` because `a_summarize_aval_chg_diff_j` pulls the analysis variables from `multivars` and labels rows by the visit name.
-
-#### 5. `a_summarize_ancova_j`
-Select `a_summarize_ancova_j` when a vertical summary table needs both descriptive statistics (`n`, `mean_sd`, `median`, `range`, `quantiles`) and ANCOVA model estimates (`lsmean_se`, `lsmean_ci`, `lsmean_diff_with_ci`, `pval`), especially when the layout includes **virtual combined treatment arms** (`add_combo_levels`):
-- `method_combo = "contrasts"` derives combined-arm LS means and differences via linear contrasts from the full unpooled model (`weights_combo = "equal"`).
-- `method_combo = "collapse"` refits the ANCOVA model after pooling the combined arms.
-
-#### 6. `a_summarize_mmrm`, `a_summarize_mmrm_with_exclude`, `a_lsmeans`, and `a_rbmi_lsmeans`
-- **`a_summarize_mmrm` / `a_summarize_mmrm_with_exclude`**: Select when fitting and tabulating an MMRM model dynamically across `AVISIT` and `ARM` facets (`variables = list(arm = ..., visit = ..., id = ..., covariates = ..., response = ...)`). Automatically handles reference visits and reference arms (`ref_levels`).
-- **`a_lsmeans`**: Select when the MMRM or ANCOVA model has already been pre-fitted via `fit_mmrm_j()` or `fit_ancova()` and merged into the data frame.
-- **`a_rbmi_lsmeans`**: Select when tabulating Reference-Based Multiple Imputation (RBMI) results pooled via Rubin's rules.
-
-#### 7. `a_sum_ratio_j`
-Select `a_sum_ratio_j` when tabulating cumulative sums (`sum`, `sum_unique`) and ratios of sums (`ratio`, `ratio_unique`), where the denominator is the sum of another column specified via `denom_by` (e.g., total dose administered divided by total dose planned).
-
----
-
-### 5.4 Proportions, Risk Differences, Mantel-Fleiss, Odds Ratios, Relative Risk & CMH
-
-1. **Confidence Intervals for Proportions (`a_proportion_ci_logical`, `a_proportion_ci_factor`, `a_cond_proportion_j`)**:
-   - Use `a_proportion_ci_logical` or `a_proportion_ci_factor` when a row only needs the formatted proportion CI (`prop_ci`) using a fixed `method` (`"wald"`, `"clopper-pearson"`, `"wilson"`, `"wilsonc"`, `"strat_wilson"`, `"agresti-coull"`, `"jeffreys"`).
-   - Use **`a_cond_proportion_j`** when the statistical analysis plan requires **adaptive CI method selection**: it automatically switches from asymptotic Wald to exact Clopper-Pearson whenever responders $\le \text{num\_limit}$ (default `0`), non-responders $\le \text{num\_limit}$, or denominator $< \text{denom\_limit}$ (default `10`), evaluated per cell (`method_scope = "cell"`) or across the entire row (`method_scope = "row"`).
-2. **Risk Difference & Hypothesis Tests (`a_proportion_diff_j`, `a_test_proportion_diff`)**:
-   - Use `a_proportion_diff_j` for standalone risk difference rows (`diff`, `diff_ci`, `diff_est_ci`) against `ref_path`.
-   - Use `a_test_proportion_diff` for standalone p-value rows (`chisq`, `cmh`, `cmh_wh`, `fisher`, `schouten`) against `ref_path`.
-3. **Mantel-Fleiss (MF) Criterion Suite (`a_proportion_diff_mf`, `a_test_proportion_diff_mf`, `a_combo_prop_diff_pval_mf`)**:
-   - Select these functions when the SAP specifies switching between stratified CMH and exact methods based on the **Mantel-Fleiss criterion** ($\text{MF} \ge \text{mf\_threshold}$, default `5`):
-     - When $\text{MF} \ge 5$: uses CMH with Sato variance (`a_proportion_diff_mf`) or CMH test (`a_test_proportion_diff_mf`).
-     - When $\text{MF} < 5$: switches to unconditional exact difference (`a_proportion_diff_mf`) or Fisher's exact test (`a_test_proportion_diff_mf`) and attaches `exact_footnote` (`RefFootnote`).
-   - Use **`a_combo_prop_diff_pval_mf`** when a single table row presents proportions (`prop`), risk differences (`diff`), and p-values (`pval`) across separate column paths mapped via `colpaths`.
-4. **Odds Ratios, Relative Risk & Ordered Categorical CMH (`a_odds_ratio_j`, `a_relative_risk`, `a_cmhrms_j`)**:
-   - **`a_odds_ratio_j`**: Estimates OR, CI, and p-value (`or_ci`, `pval`, `n_tot`) via logistic regression, conditional logistic regression (`"exact"`, `"approximate"`, `"efron"`, `"breslow"`), or `"cmh"`.
-   - **`a_relative_risk`**: Estimates stratified Relative Risk (`rel_risk_ci`, `pval`) via CMH with Greenland & Robins variance (`variables = list(strata = ...)` required).
-   - **`a_cmhrms_j` / `a_cmhrms_j_with_exclude`**: Computes the CMH Row Mean Scores test p-value (`pval`) for ordered categorical responses across arms and strata.
-5. **Proportion Tables & Simple Logical Proportions (`prop_table_afun`, `c_proportion_logical`, `response_by_var`)**:
-   - **`prop_table_afun`**: Paired with `prop_split_fun()` to populate `n`, `percent`, and `cum_percent` sub-columns.
-   - **`c_proportion_logical`**: Lightweight `cfun` computing count and proportion of `TRUE` relative to `.N_col`.
-   - **`response_by_var`**: Computes `count_denom_fraction` (`xx / xx (xx.x%)`) for `resp_var == "Y"` across levels of `.var` with denominator equal to non-missing observations of `.var` in `df`.
-
----
-
-### 5.5 Time-to-Event & Survival Analysis
-
-- **`a_event_free`**: Select for milestone survival / event-free rate rows at `time_point` (e.g., 6-month or 12-month survival), extending `tern::s_surv_timepoint` with the 3D combined statistic `event_free_ci` (`xx.xx (xx.xx, xx.xx)`).
-- **`tefos03_afun`**: Internal `afun` used by `summarize_coxreg_multivar()` to populate multivariable Cox regression model fit (`coef_se`, `pval`) and hazard ratio (`hr_est`, `hr_ci`) columns.
-- **Kaplan-Meier & Pairwise Cox HR**: Use `tern::a_surv_time` and `tern::coxph_pairwise` (do not use deprecated `a_kaplan_meier` or `a_coxph_hr`).
-
----
-
-### 5.6 Specialized Layouts (`RESP01`, Study Compliance, Wide LS Means, Row Counts & Blank Lines)
-
-1. **`resp01_acfun`, `resp01_a_comp_stat_logical`, `resp01_a_comp_stat_factor`, `resp01_counts_cfun`**:
-   - Select for `RESP01` response tables where `resp01_split_fun_fct` splits treatment arm columns into `count_prop` and `prop_ci` while the `Overall` column displays `comp_stat_ci` (RR or OR) and `pval`.
-2. **`cmp_cfun`**:
-   - Select as `cfun` in `summarize_row_groups()` for 3-column Study Compliance layouts (`Expected`, `Received`, `Missing` visits), where Received and Missing percentages use Expected visits as the dynamic denominator.
-3. **`lsmeans_wide_cfun`**:
-   - Select as `cfun` for wide-format ANCOVA layouts displaying Reference Group (`n`, `lsmean`, `se`), Testing Group (`n`, `lsmean`, `se`), Variance (`mse`, `df`), and Comparison (`lsmean` diff, `se`, `ci`, `pval`) across columns.
-4. **`c_row_counts`, `c_row_counts_alt`, `ac_blank_line`**:
-   - `c_row_counts` / `c_row_counts_alt`: Count rows in `df` or `.alt_df` (wrapped by `summarize_row_counts()`).
-   - `ac_blank_line`: Inserts a blank spacing row (`""`) as either a `cfun` or `afun`. **Only** for (1) visual spacers between substantive analysis sections, or (2) as `cfun` in `summarize_row_groups(cfun = ac_blank_line)` with `split_rows_by(..., child_labels = "visible")` to separate a visible facet label from its children. **Never** use as the sole terminating `afun` of a `split_rows_by()` chain (No-Op Anti-Pattern).
-
----
-
-## 6. Cross-Cutting Configuration Mechanisms in `junco`
-
-### 6.1 Wiring Reference Groups via `ref_path` & `get_ref_info()`
+### 5.1 Wiring Reference Groups via `ref_path` & `get_ref_info()`
 
 Standard `rtables` `ref_group` only works within a single flat `split_cols_by()` call. In clinical tables with spanning headers (e.g., `"Active Study Agent"` vs `" "`) or non-nested Risk Difference columns, `junco` analysis functions locate the control arm using **`ref_path`**:
 
@@ -465,7 +292,7 @@ Standard `rtables` `ref_group` only works within a single flat `split_cols_by()`
 
 ---
 
-### 6.2 Dynamic & Parameter-Specific Decimal Precision (`formats_d` & `format_sigfig_j`)
+### 5.2 Dynamic & Parameter-Specific Decimal Precision (`formats_d` & `format_sigfig_j`)
 
 Clinical laboratory (`ADLB`), vital signs (`ADVS`), and pharmacokinetic (`ADPC`) tables often require different decimal precision ($d$) for each parameter (`PARAMCD`) or variable. `junco` provides three ways to configure dynamic precision without writing custom `afun`s:
 
@@ -521,7 +348,7 @@ For PK/PD tables requiring $k$ significant figures instead of fixed decimals, pa
 
 ---
 
-## 7. Canonical Layout Wiring Recipes
+## 6. Canonical Layout Wiring Recipes
 
 ### Recipe 1: Adverse Event Incidence Table with Spanning Headers & Risk Differences (`a_freq_j` as `afun` and `cfun`)
 
@@ -626,7 +453,7 @@ tbl <- build_table(lyt, advs, alt_counts_df = adsl)
 
 ---
 
-## 8. Diagnostic Checklist & Escalation Path
+## 7. Diagnostic Checklist & Escalation Path
 
 > **RULE: IF a selected function produces unexpected output, THEN the failure is more likely a parameterization error than a capability gap. Re-examine `.var`, `.stats`, `val`/`label`, and `denom`/`denom_by` before escalating to `[custom_afuns.md](./custom_afuns.md)`.**
 

@@ -35,9 +35,9 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
  │     1. **Identify candidate functions** from the select_afuns.md decision matrix (Section 3).
  │        There may be more than one.
  │     2. **For each candidate, enumerate the parameter dimensions** that could vary.
- │        Use the **master catalog** (select_afuns.md Section 4) and the **detailed
- │        per-function guides** (select_afuns.md Section 5) as the lookup tables for
- │        valid values in each dimension — they list every supported `.stats` value,
+ │        Use the **function index** (select_afuns.md Section 4) and the **expert
+ │        usage skills** (routed via select_afuns.md Section 3.1) as the lookup tables
+ │        for valid values in each dimension — they list every supported `.stats` value,
  │        every `denom` option, and every `extra_args` key per function:
  │        - `.var`: Could a different variable (especially a binary flag derived in data
  │          prep) produce the correct row structure?
@@ -46,7 +46,7 @@ Need specific cell values, row labels, formats, or conditional behavior in analy
  │        - `extra_args`: Could `val`, `label`, `denom`, `denom_by`, `exclude_levels`,
  │          or other configuration arguments close the gap? (Consult the
  │          "Other Customization (`extra_args`)" column in the Section 4 catalog and
- │          the detailed parameter descriptions in Section 5.)
+ │          the expert usage skills routed via Section 3.1.)
  │        - Data prep: Could deriving a new variable (flag, recoded factor, bucketed
  │          continuous) make the function work?
  │     3. **If an attempt fails, diagnose which dimension caused the failure** before

@@ -8,13 +8,13 @@ Based on analysis of the TSFAE01 (CTC-V2) chat log against `rtables_junco_table_
 
 **Problem:** `a_maxlev` silently fails in risk-difference column layouts (`grouped_cols_w_diffs`). The chat log shows it threw `"'subset' must be logical"` inside diff columns because it doesn't support `riskdiff`/`ref_path`. This is a general limitation — any table combining worst-grade-per-subject counting with comparative columns will hit this.
 
-**Where it matters:** `select_afuns.md` Section 3 (Quick Selection Decision Matrix) lists `a_maxlev` without any indication that it doesn't work in difference column layouts. The function's entry in Section 4 (Master Catalog) also omits this. Section 5.1 item 5 (the detailed `a_maxlev` guide) gives no caveat. A user following the selection workflow would pick `a_maxlev` for worst-grade tables, then discover it breaks when diff columns are present. More broadly, the selection workflow has no systematic way to determine which afuns support difference columns and which don't — the user must discover this by trial and error.
+**Where it matters:** `select_afuns.md` Section 3 (Quick Selection Decision Matrix) lists `a_maxlev` without any indication that it doesn't work in difference column layouts. The function's entry in Section 4 (Function → Expert Skill Index) also omits this. The expert usage skill for `a_maxlev` (routed via Section 3.1) gives no caveat. A user following the selection workflow would pick `a_maxlev` for worst-grade tables, then discover it breaks when diff columns are present. More broadly, the selection workflow has no systematic way to determine which afuns support difference columns and which don't — the user must discover this by trial and error.
 
 **Suggested improvement:**
 
 ### A. Add a "Supports Diff Columns" indicator to the afun lookup surfaces
 
-Add a **Diff Column Compatible** column (or similarly named, e.g., "Supports Difference Columns") to the Quick Selection Decision Matrix (Section 3) and the Master Catalog (Section 4). This column should contain a simple Yes/No indicator for each function. At minimum:
+Add a **Diff Column Compatible** column (or similarly named, e.g., "Supports Difference Columns") to the Quick Selection Decision Matrix (Section 3) and the Function → Expert Skill Index (Section 4). This column should contain a simple Yes/No indicator for each function. At minimum:
 - `a_freq_j`: Yes
 - `a_freq_j_with_exclude`: Yes
 - `a_freq_combos_j`: Yes
@@ -67,7 +67,7 @@ This template generalizes to any afun that doesn't support difference columns: c
 
 ### C. Add the caveat to the `a_maxlev` entry
 
-In the Master Catalog (Section 4) and the detailed guide (Section 5.1 item 5), add a caveat stating that `a_maxlev` does not support `riskdiff`/`ref_path` and cannot be used directly in layouts with difference columns (`grouped_cols_w_diffs` or manual risk-difference column branches). Reference the two workaround patterns above.
+In the Function → Expert Skill Index (Section 4) and the expert usage skill for `a_maxlev`, add a caveat stating that `a_maxlev` does not support `riskdiff`/`ref_path` and cannot be used directly in layouts with difference columns (`grouped_cols_w_diffs` or manual risk-difference column branches). Reference the two workaround patterns above.
 
 ### D. Add a blanket caveat that no `tern` function supports junco-style difference columns
 
