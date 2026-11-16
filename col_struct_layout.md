@@ -295,17 +295,6 @@ Core rules for custom split functions:
 
 ## 6. Canonical Advanced Column Structure Archetypes
 
-> **Quick Index** — Archetype → key functions / concepts:
->
-> | # | Archetype | Key Functions / Concepts |
-> |---|---|---|
-> | 1 | Grouped Treatments with Pairwise Difference Columns | `grouped_cols_w_diffs()`, `create_colspan_var()`, `create_colspan_map()`, combo arms, risk-difference columns |
-> | 2 | Treatment Arms Subdivided by Subgroups (± Totals) | `grouped_cols_w_subgrps()`, `add_overall_level()`, within-arm Total facet |
-> | 3 | Shift Table (Clinical Laboratory / Toxicity) | `shift_tbl_col_struct()`, cross-tabulation columns, N / baseline-level / Total structure |
-> | 4 | "Some vs All" / Non-Mutually Exclusive Comparisons | `some_v_all_col_struct()`, `add_combo_facet()`, `restrict_facets()` |
-> | 5 | Longitudinal Visits with Conditional Change-from-Baseline | `split_cols_by_multivar()`, `.spl_context` post-hook, conditional facet removal |
-> | 6 | Per-Parent Data-Driven Quantile Bins | `make_split_fun(core_split = ...)`, per-facet `quantile()` + `cut()` |
-
 ### Archetype 1: Grouped Treatments with Pairwise Difference Columns
 
 #### Primary Solution (using `junco`):
@@ -579,7 +568,7 @@ Post-processing split function factory for multi-variable layouts (`split_cols_b
    - `split_cols_by` preserves all factor levels (producing `N=0` columns). Use `droplevels()` or `keep_split_levels()` when unobserved levels should be omitted.
    - **Post-filter and post-join repair**: Filtering `adsl` (e.g., removing `"Screen Failure"`) can leave stale factor levels or convert factors to character. After any filter, re-apply `factor()` to drop unused levels: `adsl <- adsl |> filter(...) |> mutate(TRT01A = factor(TRT01A))`. After joining `adsl` columns onto `df`, synchronize factor levels: `adae <- adae |> mutate(TRT01A = factor(TRT01A, levels = levels(adsl$TRT01A)))`. Mismatched levels between `df` and `alt_counts_df` cause `"All facets matched removal criteria"` or `create_colspan_map` errors.
 4. **`ref_path` Double-Injection with `grouped_cols_w_diffs()`**:
-   - **RULE: IF columns are built with `grouped_cols_w_diffs()`, THEN `ref_path` must NOT appear in `extra_args`.** `grouped_cols_w_diffs()` auto-injects `ref_path` into comparison column `extra_args`; passing it again causes `"formal argument ref_path matched by multiple actual arguments"`. For custom afuns that need `ref_path` in treatment columns, use the closure-capture pattern from `[custom_afuns.md](./custom_afuns.md)` Tier 3.
+   - See Section 8.1 RULE. Passing `ref_path` in `extra_args` when `grouped_cols_w_diffs()` already auto-injects it causes `"formal argument ref_path matched by multiple actual arguments"`.
 5. **Sibling Header Visibility**:
    - When modifying column count visibility via `facet_colcounts_visible(tbl, path) <- TRUE`, pass the path pointing to the parent split level, not a single leaf.
 6. **Data-Duplication Facet Fabrication (PROHIBITED)**:

@@ -129,7 +129,7 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
    - **Multi-Section / Stacked Layouts**: Post-`analyze()` splits default to `nested = FALSE`. For reusability inside an outer subgroup split, anchor subsequent sections via **`at_sibling = "<first_var>"`**.
    - **Intermediate Nesting**: Use `at_sibling = "<anchor_var>"` (deepest anchor first) for analyses/splits at intermediate depths.
 2. **Place `summarize_row_groups()` for Marginal Summary Rows**: Immediately after each `split_rows_by*()` whose group header displays summary statistics. Use `child_labels = "visible"` **only** when multiple summary rows appear beneath a plain facet label.
-3. **Select Row Split Functions (`split_fun`)** → Defer to [row_struct_layout.md](./row_struct_layout.md) Section 3 (split function catalog) and Section 5 (combo/overall levels). All split functions work identically for `split_rows_by` and `split_cols_by`.
+3. **Select Row Split Functions (`split_fun`)** → Defer to [row_struct_layout.md](./row_struct_layout.md) Section 5 (split function catalog, combo/overall levels, custom `make_split_fun` compositions). All split functions work identically for `split_rows_by` and `split_cols_by`.
 4. **Configure Label Placement** (`label_pos`, `child_labels`, `show_labels`) → Defer to [row_struct_layout.md](./row_struct_layout.md) Section 4.
 5. **Isolated Prototyping with Dummy Functions**:
    - Test `lyt_rows` using `dummy_one_row` and `dummy_n_rows_factory(k)` from [row_struct_layout.md](./row_struct_layout.md) to verify indentation, section dividers, and label visibility before introducing statistical functions.
