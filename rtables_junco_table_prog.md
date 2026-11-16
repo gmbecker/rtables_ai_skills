@@ -87,8 +87,9 @@ flowchart TD
 Before writing layout code, inspect the shell and answer four questions:
 
 1. **What are the input datasets (`df` vs. `alt_counts_df`)?**
+   > **RULE: IF `df` is not a one-row-per-subject dataset (i.e., it is event-level or repeated-measures), THEN `alt_counts_df` is mandatory in `build_table()`.** Without it, column header `(N=xx)` counts and all `denom = "n_altdf"` percentage denominators will reflect event/record counts instead of the subject population.
    - **Subject-level table** (Demographics, Disposition, Baseline Characteristics): `df` is `adsl`. Usually `alt_counts_df` is not needed (or `alt_counts_df = adsl` if `df` is pre-filtered).
-   - **Event-level or repeated-measures table** (Adverse Events `adae`, Concomitant Meds `adcm`, Labs `adlb`, Vital Signs `advs`, Exposure `adex`): `df` is the event/visit dataset, and **`alt_counts_df = adsl` is mandatory** so column header counts `(N=xx)` and subject-level percentage denominators reflect the full treated/safety population rather than only subjects with events.
+   - **Event-level or repeated-measures table** (Adverse Events `adae`, Concomitant Meds `adcm`, Labs `adlb`, Vital Signs `advs`, Exposure `adex`): `df` is the event/visit dataset, and `alt_counts_df` is the subject-count dataset so column header counts and subject-level percentage denominators reflect the full treated/safety population rather than only subjects with events.
 2. **What is the Column Header Topology?**
    - Classify the topology: asymmetric hierarchy (parent-dependent children), symmetric hierarchy (uniform children), sibling non-nested branches, multi-variable sub-columns, or cross-tabulation.
    - Identify spanning headers, leaf-level grouping variables, virtual combination levels (e.g., `"All Active"`), and non-nested comparison branches (e.g., `"Risk Difference (%) (95% CI)"`).
@@ -98,8 +99,9 @@ Before writing layout code, inspect the shell and answer four questions:
 4. **What are the Cell Contents (Marginal `cfun` vs. Leaf `afun`)?**
    - For each row section and group header, note the statistic format (`xx (xx.x%)`, `xx / xx (xx.x%)`, `Mean (SD)`, `LS Mean (95% CI)`), unit of counting (unique subjects vs. events), denominator population, and any column- or row-conditional behavior.
 5. **What is the record granularity of each dataset?**
+   > **RULE: IF a counting mechanism relies on row counts (default `summarize_row_groups`, `nrow(df)`, `.stats = "n_df"`), THEN verify empirically that the dataset has exactly one row per subject within each relevant facet.** If it does not, use a subject-deduplicating mechanism instead (e.g., `a_freq_j` with `.stats = "count_unique"`).
    - For each dataset that will serve as `df` or `alt_counts_df`, determine the observational unit: Is there one row per subject (`adsl`), one row per subject per visit (`advs`, `adlb` — verify!), one row per event (`adae`), or some other structure?
-   - **Verify empirically** (e.g., `nrow(df) == nrow(distinct(df, USUBJID, AVISIT, PARAMCD))`) rather than assuming. Record the verified granularity in the implementation log. This determines whether row-counting mechanisms (default `summarize_row_groups`, `nrow(df)`) can serve as subject counts or whether explicit deduplication is required.
+   - **Verify empirically** (e.g., `nrow(df) == nrow(distinct(df, USUBJID, AVISIT, PARAMCD))`) rather than assuming. Record the verified granularity in the implementation log.
 
 ---
 
@@ -266,6 +268,8 @@ When combining column layouts, row layouts, and analysis functions, the followin
   `create_colspan_var()` / `create_colspan_map()` and `grouped_cols_w_diffs()` require factor input with matching levels. **Never create a spanning variable with raw `ifelse(..., " ", "Active ...")` without wrapping it in `factor(..., levels = c(active_lbl, " "))`**: `create_colspan_map()` does not error on character input—instead, ASCII ordering sorts `" "` (32) before `"A"` (65), silently placing Placebo to the *left* of Active Treatment. Always use `create_colspan_var()` on `adsl` first, and synchronize onto `df` via `factor(..., levels = levels(adsl$...))` rather than independent `droplevels()` (which can drop unobserved arm levels in pre-filtered event datasets). Character or mismatched-level variables cause silent column reordering, `"All facets matched removal criteria"`, or `create_colspan_map` errors.
 
 ### Contract 2: Reference Path (`ref_path`) Alignment Between Column Layout and `afun`/`cfun`
+> **RULE: IF columns are built with `grouped_cols_w_diffs()` (or any column structure function that auto-injects `ref_path`), THEN `ref_path` must NOT appear in `extra_args` on any downstream `analyze()` or `summarize_row_groups()` call.** Doing so causes `"formal argument ref_path matched by multiple actual arguments"` in comparison columns. When building manual `split_cols_by()` comparison branches (without `grouped_cols_w_diffs()`), pass `ref_path = ref_path` explicitly in `extra_args`.
+
 - Any comparative `junco` function (`a_freq_j(..., riskdiff = TRUE)`, `a_eair100_j(..., riskdiff = TRUE)`, `a_diff_means()`, `a_summarize_ex_j(..., comp_btw_group = TRUE)`, `a_summarize_aval_chg_diff_j()`, `a_summarize_ancova_j()`, `a_lsmeans()`, `a_proportion_diff_j()`, `a_odds_ratio_j()`, `a_relative_risk()`, `a_cmhrms_j()`, `a_patyrs_j()`) requires `ref_path` to point to the exact column tree path of the control/reference group:
   - With spanning header variable `"colspan_trt"` (where control arm `"Placebo"` is under span label `" "`):
     ```r
@@ -275,11 +279,13 @@ When combining column layouts, row layouts, and analysis functions, the followin
     ```r
     ref_path <- c("TRT01A", "Placebo")
     ```
-- Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`. **When using `grouped_cols_w_diffs()` or any column structure function that auto-injects `ref_path`, `ref_path` must NOT appear in `extra_args`** — doing so causes `"formal argument ref_path matched by multiple actual arguments"` in comparison columns. When building manual `split_cols_by()` comparison branches (without `grouped_cols_w_diffs()`), pass `ref_path = ref_path` explicitly in `extra_args`.
+- Note: `grouped_cols_w_diffs()` automatically wires `ref_path` into the comparison columns' `extra_args`. When building manual `split_cols_by()` comparison branches (without `grouped_cols_w_diffs()`), pass `ref_path = ref_path` explicitly in `extra_args`.
 - **Custom / Bridged `afun` Escalation ([`custom_afuns.md`](./custom_afuns.md))**: If you escalate to [custom_afuns.md](./custom_afuns.md) to use an existing `.ref_group`/`.in_ref_col`-based function (or a custom comparative `afun`) inside a spanned column layout: when using `grouped_cols_w_diffs()`, capture `ref_path` from a closure scope (see Tier 4 closure-capture pattern in `[custom_afuns.md](./custom_afuns.md)`); when building column layouts manually with `split_cols_by()`, pass `ref_path` via `extra_args = list(ref_path = ref_path)` and resolve it inside the wrapper with `junco::get_ref_info(ref_path, .spl_context, .var)`.
 
 ### Contract 3: Subgroup Row Splits + `denom_by` Conditioning
-- Whenever row faceting splits the table by a demographic/baseline subgroup variable (e.g., `split_rows_by("SEX")` or `split_rows_by("AGEGR1")`) and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
+> **RULE: IF a row split partitions subjects into subgroups (e.g., `split_rows_by("SEX")`) AND percentages inside each subgroup should be relative to the subgroup size in that arm (not the full arm N), THEN set `denom = "n_altdf"` and `denom_by = "<row_split_var>"` in `extra_args` of all nested `summarize_row_groups()` and `analyze()` calls.**
+
+- Whenever row faceting splits the table by a demographic/baseline subgroup variable and percentages inside each subgroup are out of the **subgroup sample size in that treatment arm** (rather than the full arm `N`), you must:
   1. Pass the subject-count dataset as `alt_counts_df` to `build_table()`.
   2. Set `denom = "n_altdf"` and `denom_by = "SEX"` (matching the outer `split_rows_by` variable name) inside `extra_args` of all nested `summarize_row_groups()` and `analyze()` calls.
   3. Typically use `.stats = "count_unique_denom_fraction"` (`xx / xx (xx.x%)`) in the subgroup body rows because the subgroup denominator `N` differs from the column header `(N=xx)`.

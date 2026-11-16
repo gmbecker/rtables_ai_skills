@@ -14,6 +14,8 @@ description: Construct, extend, wrap, and combine custom analysis functions (`af
 
 Before writing a custom function body, evaluate your requirement against these six tiers in order:
 
+> **RULE: Before writing ANY custom function, exhaust Tiers 0–4 in order. The most common premature-escalation pattern is: one parameterization of a correct function fails → the function is declared inadequate → a bespoke Tier 5 function is written.**
+
 ```
 Need specific cell values, row labels, formats, or conditional behavior in analyze() / summarize_row_groups()?
  │
