@@ -173,7 +173,7 @@ basic_table() |>
 ### 3.1 Default Nesting vs. `nested = FALSE`
 | Sequence of Layout Calls | Default Behavior (`nested = TRUE`) | Effect of `nested = FALSE` on Second Call |
 | :--- | :--- | :--- |
-| `split_rows_by("A") \|> split_rows_by("B")` | `B` nests **inside** every level of `A` ($A \times B$ hierarchy). |*(Invalid without terminating `A` with `analyze()` first)* |
+| `split_rows_by("A") \|> split_rows_by("B")` | `B` nests **inside** every level of `A` (A × B hierarchy). |*(Invalid without terminating `A` with `analyze()` first)* |
 | `split_rows_by("A") \|> analyze("X") \|> analyze("Y")` | `X` and `Y` are bundled together as consecutive leaf tables **inside** every level of `A`. | `analyze("Y", nested = FALSE)` places `Y` at the **root** level after the entire `A` section finishes. |
 | `analyze("X") \|> split_rows_by("B")` | `split_rows_by` after `analyze` **always defaults to `nested = FALSE`** (places `B` as a new root section after `X`). | Explicit `nested = FALSE` has the same root-level behavior, making section boundaries visually clear in code. |
 
@@ -263,11 +263,11 @@ Row labels are controlled by three distinct parameters across two levels of the 
 
 | Desired Visual Pattern in Shell | `split_rows_by*` Settings | `summarize_row_groups`? | `analyze` Settings |
 | :--- | :--- | :--- | :--- |
-| **Level label row (empty cells) $\to$ indented leaf rows**<br>`F`<br>`  a   -` | `child_labels = "default"` | No | `show_labels = "default"` |
-| **Level summary row (with cells) $\to$ indented leaf rows**<br>`F     -`<br>`  a   -` | `child_labels = "default"` | **Yes** (`cfun` returns 1 row labeled by `labelstr`) | `show_labels = "default"` |
-| **Level label row (empty cells) $\to$ indented multi-row group summary $\to$ doubly indented leaf rows**<br>`cl A.1`<br>`  a       -`<br>`  b       -`<br>`    leaf  -` | **`child_labels = "visible"`** | **Yes** (`cfun` returns $\ge 2$ rows or non-header summary rows) | `show_labels = "default"` |
-| **Level label row $\to$ blank spacer $\to$ indented leaf rows**<br>`cl A.1`<br>` `<br>`  leaf  -` | **`child_labels = "visible"`** | **Yes** (`cfun = ac_blank_line` inserts a blank gap between the visible facet label and child rows) | `show_labels = "default"` |
-| **Variable header row $\to$ Level rows $\to$ leaf rows**<br>`Sex`<br>`  F`<br>`    a   -` | **`label_pos = "visible"`** | Optional | `show_labels = "hidden"` (if needed) |
+| **Level label row (empty cells) → indented leaf rows**<br>`F`<br>`  a   -` | `child_labels = "default"` | No | `show_labels = "default"` |
+| **Level summary row (with cells) → indented leaf rows**<br>`F     -`<br>`  a   -` | `child_labels = "default"` | **Yes** (`cfun` returns 1 row labeled by `labelstr`) | `show_labels = "default"` |
+| **Level label row (empty cells) → indented multi-row group summary → doubly indented leaf rows**<br>`cl A.1`<br>`  a       -`<br>`  b       -`<br>`    leaf  -` | **`child_labels = "visible"`** | **Yes** (`cfun` returns >=2 rows or non-header summary rows) | `show_labels = "default"` |
+| **Level label row → blank spacer → indented leaf rows**<br>`cl A.1`<br>` `<br>`  leaf  -` | **`child_labels = "visible"`** | **Yes** (`cfun = ac_blank_line` inserts a blank gap between the visible facet label and child rows) | `show_labels = "default"` |
+| **Variable header row → Level rows → leaf rows**<br>`Sex`<br>`  F`<br>`    a   -` | **`label_pos = "visible"`** | Optional | `show_labels = "hidden"` (if needed) |
 | **Top-left corner hierarchy labels**<br>`System Organ Class`<br>`  Preferred Term   all obs`<br>`————————————` | **`label_pos = "topleft"`** on outer split(s) (+ optional `append_topleft("  ...")`) | Optional | `show_labels = "default"` |
 | **Leaf rows directly represent split levels (no extra level header)**<br>`SCREENING   -`<br>`BASELINE    -` | **`child_labels = "hidden"`** | No | `afun` labels its row with the split value. **Note**: This pattern is the correct alternative when you want split level names as row labels with real cell values. The `afun` must produce the content — never use a no-op `afun` here. In most cases, the simpler approach is to put the variable directly in `analyze(var, afun = ...)` instead of splitting on it. |
 | **Section header (blank cells) above analysis rows in stacked layout**<br>`Worst toxicity grade`<br>`  Grade 1   -`<br>`  Grade 2   -` | N/A (no `split_rows_by`) | No | **`var_labels = "Worst toxicity grade", show_labels = "visible"`** on `analyze()`. The `afun` emits only the data rows. **Never use `rcell(NULL)` inside the `afun` for this purpose** — see `[custom_afuns.md](./custom_afuns.md)` Building Block 6. |
@@ -307,13 +307,13 @@ By default, sequential `split_rows_by()` calls create a **full-factorial cross-p
 | :--- | :--- | :--- |
 | **`drop_split_levels`** | Empirical Exclusion | Drops factor levels that have **zero observations in the incoming parent facet's data**. |
 | **`drop_and_remove_levels(excl)`** | Empirical + Prescriptive | Drops unobserved levels **and** prescriptively removes the level names in `excl`. |
-| **`keep_split_levels(only)`** | Prescriptive Inclusion | Keeps **only** the factor levels listed in `only` (in that order), even if $N=0$. |
-| **`remove_split_levels(excl)`** | Prescriptive Exclusion | Removes the factor levels listed in `excl`, keeping all other declared levels (even if $N=0$). |
+| **`keep_split_levels(only)`** | Prescriptive Inclusion | Keeps **only** the factor levels listed in `only` (in that order), even if N=0. |
+| **`remove_split_levels(excl)`** | Prescriptive Exclusion | Removes the factor levels listed in `excl`, keeping all other declared levels (even if N=0). |
 | **`reorder_split_levels(neworder, newlabels, drlevels)`** | Prescriptive Reordering | Reorders (and optionally relabels) the split facets to match `neworder`. |
 | **`add_overall_level(valname, label, first = TRUE)`** | Non-Mutually Exclusive | Adds a pooled `"All ..."` / `"Any ..."` facet combining all observations at that split tier (placed first if `first = TRUE`, or last if `first = FALSE`). |
 | **`add_combo_levels(combodf, trim, first, keep_levels)`** | Non-Mutually Exclusive | Adds virtual combined facets defined by a `data.frame`/`tribble` with columns `valname`, `label`, `levelcombo` (character vector of levels or `select_all_levels`), and `exargs`. |
 | **`trim_levels_in_group(inner_var, drop_outlevs = TRUE)`** | Empirical Hierarchical | Placed on the **outer** `split_rows_by()`. For each outer facet, restricts the levels of `inner_var` to only those observed within that outer facet. |
-| **`trim_levels_to_map(map)`** | Prescriptive Hierarchical | Restricts valid `(outer_var, inner_var, ...)` combinations to the exact rows of `map` (a `data.frame`/`tribble`), preserving $N=0$ for mapped pairs and omitting unmapped pairs even if observed. |
+| **`trim_levels_to_map(map)`** | Prescriptive Hierarchical | Restricts valid `(outer_var, inner_var, ...)` combinations to the exact rows of `map` (a `data.frame`/`tribble`), preserving N=0 for mapped pairs and omitting unmapped pairs even if observed. |
 | **`junco::make_combo_splitfun(nm, label, levels = NULL, rm_other_facets = TRUE)`** | `junco` Combo Helper | Creates a split function that adds a combined facet `nm` (across `levels`, or all levels if `NULL`) and optionally removes the individual level facets (`rm_other_facets = TRUE`). |
 
 ---
@@ -323,8 +323,8 @@ By default, sequential `split_rows_by()` calls create a **full-factorial cross-p
 > [!WARNING]
 > **`drop_split_levels` Evaluates on the Incoming Parent Facet Data!**
 > When `drop_split_levels` is used on an **inner** `split_rows_by("SEX", split_fun = drop_split_levels)` nested inside `split_rows_by("RACE", split_fun = drop_split_levels)`, it drops unobserved `SEX` levels **separately inside each `RACE` group**. If `"MULTIPLE"` race only has male subjects in the dataset, `"F"` will disappear under `"MULTIPLE"` while appearing under `"ASIAN"`.
-> - **Rule**: If every outer facet must display a uniform, fixed set of inner facets (even when $N=0$ in some subgroups), use **`keep_split_levels(c("F", "M"))`** or **`remove_split_levels(...)`** (or `add_overall_level()`) on the inner split—**never** `drop_split_levels`.
-> - Conversely, if the inner variable is **hierarchically dependent** on the outer variable (e.g., `AEBODSYS` $\to$ `AEDECOD` or `REGION1` $\to$ `COUNTRY`, where `"USA"` only belongs to `"North America"`), use **`trim_levels_in_group("AEDECOD")`** on the outer split (empirical) or **`trim_levels_to_map(map)`** (prescriptive).
+> - **Rule**: If every outer facet must display a uniform, fixed set of inner facets (even when N=0 in some subgroups), use **`keep_split_levels(c("F", "M"))`** or **`remove_split_levels(...)`** (or `add_overall_level()`) on the inner split—**never** `drop_split_levels`.
+> - Conversely, if the inner variable is **hierarchically dependent** on the outer variable (e.g., `AEBODSYS` → `AEDECOD` or `REGION1` → `COUNTRY`, where `"USA"` only belongs to `"North America"`), use **`trim_levels_in_group("AEDECOD")`** on the outer split (empirical) or **`trim_levels_to_map(map)`** (prescriptive).
 
 ---
 
@@ -443,7 +443,7 @@ basic_table() |>
   analyze("AGE", afun = dummy_one_row)
 ```
 
-#### Pattern 4: Data-Driven Frequency Ordering & Top-$k$ + Pooled `"Other"` Row Facet
+#### Pattern 4: Data-Driven Frequency Ordering & Top-k + Pooled `"Other"` Row Facet
 ```r
 top_k_plus_other <- function(k = 3, other_label = "Other System Organ Classes") {
   make_split_fun(post = list(function(ret, spl, fulldf) {
@@ -492,7 +492,7 @@ Use this lookup table to map any desired visual row structure to its canonical `
 | **3** | **Single Row Split with Group Summary Header Rows** | `basic_table() \|> split_rows_by("AEBODSYS", split_fun = trim_levels_in_group("AEDECOD")) \|> summarize_row_groups("USUBJID", cfun = ...) \|> analyze("AEDECOD", afun = ...)` |
 | **4** | **Root Overall Summary Row + Un-Nested Group Split with Group Summaries** (Standard AE Table) | `basic_table() \|> analyze("USUBJID", afun = ...) \|> split_rows_by("AEBODSYS", nested = FALSE, split_fun = trim_levels_in_group("AEDECOD"), label_pos = "topleft") \|> summarize_row_groups("AEBODSYS", cfun = ...) \|> analyze("AEDECOD", afun = ...)` |
 | **5** | **Facet Label Row + Separate Indented Multi-Row Group Summary** | `basic_table() \|> split_rows_by("AEBODSYS", child_labels = "visible") \|> summarize_row_groups("USUBJID", cfun = dummy_n_rows_factory(2)) \|> analyze("AEDECOD", afun = ...)` |
-| **6** | **2-Level Nested Row Split (Outer Label Only $\to$ Inner Group Summary $\to$ Leaf)** | `basic_table() \|> split_rows_by("RACE") \|> split_rows_by("SEX", split_fun = keep_split_levels(c("F", "M"))) \|> summarize_row_groups(cfun = ...) \|> analyze("BMEASIFL", afun = ...)` |
+| **6** | **2-Level Nested Row Split (Outer Label Only → Inner Group Summary → Leaf)** | `basic_table() \|> split_rows_by("RACE") \|> split_rows_by("SEX", split_fun = keep_split_levels(c("F", "M"))) \|> summarize_row_groups(cfun = ...) \|> analyze("BMEASIFL", afun = ...)` |
 | **7** | **2-Level Nested Row Split with Group Summaries at Both Tiers** | `basic_table() \|> split_rows_by("STRATA1", split_fun = keep_split_levels(c("A", "B"))) \|> summarize_row_groups(cfun = ...) \|> split_rows_by("SEX", split_fun = keep_split_levels(c("F", "M"))) \|> summarize_row_groups(cfun = ...) \|> analyze("AGE", afun = ...)` |
 | **8** | **3-Level Nested Row Split (`Subgroup -> Filter Flag -> SOC -> PT`)** | `basic_table() \|> split_rows_by("SEX", split_fun = drop_split_levels) \|> summarize_row_groups("SEX", cfun = ...) \|> split_rows_by("TRTEMFL", split_fun = keep_split_levels("Y"), indent_mod = -1L) \|> summarize_row_groups("TRTEMFL", cfun = ...) \|> split_rows_by("AEBODSYS", split_fun = trim_levels_in_group("AEDECOD")) \|> summarize_row_groups("AEBODSYS", cfun = ...) \|> analyze("AEDECOD", afun = ...)` |
 | **9** | **Multi-Variable Analysis Inside Row Split (`AGE` and `STRATA1` under each `SEX`)** | `basic_table() \|> split_rows_by("SEX") \|> analyze(c("AGE", "STRATA1"), afun = ..., show_labels = "visible")` |
@@ -500,8 +500,8 @@ Use this lookup table to map any desired visual row structure to its canonical `
 | **11** | **Subgroup-Ready Multi-Section Layout Using `at_sibling`** | `basic_table() \|> split_rows_by("STRATA1") \|> analyze("AGE", afun = ...) \|> split_rows_by("RACE", at_sibling = "AGE") \|> analyze("AGE", afun = ...) \|> split_rows_by("SEX", at_sibling = "AGE") \|> analyze("AGE", afun = ...)` |
 | **12** | **Intermediate Nesting (`A -> B -> C` with Sibling Analysis at `B`)** | `basic_table() \|> split_rows_by("RACE") \|> split_rows_by("STRATA1") \|> split_rows_by("SEX") \|> analyze("AGE", afun = ...) \|> analyze("BMRKR2", at_sibling = "STRATA1", show_labels = "visible", afun = ...)` |
 | **13** | **Single-Level Collapse into "Any" Group Header + Level Breakdown (`make_combo_splitfun`)** | `basic_table() \|> split_rows_by("AESEV", split_fun = junco::make_combo_splitfun(nm = "AESEV_ALL", label = "Any AE", levels = NULL)) \|> summarize_row_groups("AESEV", cfun = ...) \|> analyze("AESEV", afun = ...)` |
-| **14** | **Trimmed Outer Split $\times$ Complete Inner Scale with Leading Subtotal (`Any Grade`, `1`..`5`)** | `basic_table() \|> split_rows_by("AEBODSYS", split_fun = keep_split_levels(c("cl A.1", "cl B.1"))) \|> split_rows_by("AETOXGR", split_fun = add_overall_level("Any Grade", first = TRUE)) \|> summarize_row_groups("USUBJID", cfun = ...) \|> analyze("AGE", afun = ...)` |
-| **15** | **Parameter $\to$ Hidden Visit Child Labels (`AVISIT` Labelled by `afun`)** | `basic_table() \|> split_rows_by("PARAM", label_pos = "topleft", split_fun = drop_split_levels) \|> split_rows_by("AVISIT", label_pos = "topleft", split_fun = drop_split_levels, child_labels = "hidden") \|> analyze("STUDYID", afun = ...)` |
+| **14** | **Trimmed Outer Split × Complete Inner Scale with Leading Subtotal (`Any Grade`, `1`..`5`)** | `basic_table() \|> split_rows_by("AEBODSYS", split_fun = keep_split_levels(c("cl A.1", "cl B.1"))) \|> split_rows_by("AETOXGR", split_fun = add_overall_level("Any Grade", first = TRUE)) \|> summarize_row_groups("USUBJID", cfun = ...) \|> analyze("AGE", afun = ...)` |
+| **15** | **Parameter → Hidden Visit Child Labels (`AVISIT` Labelled by `afun`)** | `basic_table() \|> split_rows_by("PARAM", label_pos = "topleft", split_fun = drop_split_levels) \|> split_rows_by("AVISIT", label_pos = "topleft", split_fun = drop_split_levels, child_labels = "hidden") \|> analyze("STUDYID", afun = ...)` |
 | **16** | **Mixed Nesting Levels (Selective Drill-Down on Only `"DISCONTINUED"`)** | **Option A (Preferred 2-tier `analyze`)**: `split_rows_by("RACE") \|> analyze("EOSSTT", afun = a_two_tier, extra_args = list(inner_var = "DCSREAS", drill_down_levs = "DISCONTINUED"))`<br>**Option B (Asymmetric `core_split`)**: `split_rows_by("EOSSTT") \|> summarize_row_groups("USUBJID", cfun = ...) \|> split_rows_by("DCSREAS", split_fun = cond_reason_split) \|> analyze("USUBJID", afun = ...)` |
 | **17** | **Page-By Outer Split (Separate Page Per Facet)** | `basic_table(title = "...") \|> split_rows_by("PARAMCD", page_by = TRUE, page_prefix = "Parameter", split_fun = drop_split_levels) \|> split_rows_by("AVISIT", split_fun = drop_split_levels) \|> summarize_row_groups(cfun = ...) \|> analyze("AVAL", afun = ...)` |
 | **18** | **Nested Page-By Splits (Page Per Outer × Inner Facet Combination)** | `basic_table(title = "...") \|> split_rows_by("SEX", page_by = TRUE, page_prefix = "Gender", split_fun = drop_split_levels) \|> split_rows_by("STRATA1", page_by = TRUE, page_prefix = "Stratum") \|> analyze("AGE", afun = ...)` |

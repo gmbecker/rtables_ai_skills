@@ -11,7 +11,7 @@ This skill provides a systematic framework and complete reference catalog for **
 > **Scope Boundary & Strategy**
 > - **Use this skill** to diagnose what a table's cells represent and to select/parameterize existing production functions passed to `rtables::analyze(..., afun = ..., extra_args = ...)` and `rtables::summarize_row_groups(..., cfun = ..., extra_args = ...)`.
 > - **Prefer `junco` `a_*` / `c_*` / `ac_*` functions** whenever `library(junco)` is available: they plug directly into standard `rtables` layout pipelines (`analyze()` and `summarize_row_groups()`), natively resolve complex spanning headers via `ref_path`, and automatically handle column/row conditionality.
-> - **After selecting a function**, escalate to its **expert usage skill** via the Section 3.1 routing table for detailed parameterization, gotchas, and worked examples.
+> - **After selecting a function**, escalate to its **expert usage skill** via the Section 3.1 expert skill index for detailed parameterization, gotchas, and worked examples.
 > - **When no existing function satisfies the requirement**, escalate to `[custom_afuns.md](./custom_afuns.md)` for extending/combining existing functions (`make_afun()`, `c(rvs1, rvs2)`, `get_ref_info()`) or writing bespoke custom analysis functions (`function(x, df, .var, .spl_context, ...) { in_rows(...) }`). Always verify whether an existing `junco` or `tern` function (with appropriate `extra_args`) satisfies the requirement before escalating.
 > - **A missing section-header label is not a gap in the afun**: If an existing function produces the correct cells and only a leading label row above the block is missing, use the function directly with `var_labels = "...", show_labels = "visible"` on the `analyze()` call. Do not escalate to `[custom_afuns.md](./custom_afuns.md)` or write a custom wrapper solely to add a header row.
 
@@ -48,7 +48,7 @@ Even a seemingly simple frequency count in an event dataset (such as `ADAE` or `
 
 | Unit of Analysis | Meaning in Clinical Data | `junco` / `tern` Mechanism |
 | :--- | :--- | :--- |
-| **Unique Subjects (Patients)** | Number of distinct subjects (`USUBJID`) experiencing $\ge 1$ event in that cell (`length(unique(x))`). Standard for AE incidence tables. | `a_freq_j` with `.stats = "count_unique"`, `"count_unique_fraction"`, or `"count_unique_denom_fraction"` *(default)* |
+| **Unique Subjects (Patients)** | Number of distinct subjects (`USUBJID`) experiencing >=1 event in that cell (`length(unique(x))`). Standard for AE incidence tables. | `a_freq_j` with `.stats = "count_unique"`, `"count_unique_fraction"`, or `"count_unique_denom_fraction"` *(default)* |
 | **Total Events (Occurrences)** | Total number of event records in that cell (`length(x)`), where a single subject may contribute multiple events. | `a_freq_j` with `.stats = "count"`; or `a_eair100_j(..., count_multiple_events = TRUE)` |
 | **Subject's Worst / Maximum Severity** | Each subject is counted **once** per category at their maximum ordered factor level (e.g., highest CTCAE toxicity grade `AETOXGR` or severity `AESEV`). | `a_maxlev` (`any_level = TRUE` in `cfun` for "Any Grade" header; `any_level = FALSE` in `afun` for grade breakdown) |
 | **Person-Years / Time at Risk** | Cumulative follow-up duration across subjects (either total exposure time or time censored at first event occurrence `occ_dy / 365.25`). | `a_patyrs_j` (total exposure) and `a_eair100_j` / `a_eair_strat_j` (events per 100 person-years) |
@@ -104,15 +104,15 @@ Whenever a table layout has **non-nested (sibling) column splits** or **multi-va
 > **RULE: IF the column layout has non-nested (sibling) column splits or multi-variable column splits, THEN the `afun`/`cfun` must be column-aware.** All `tern` functions are column-agnostic by default and require wrapping before use in such layouts.
 
 **Selection Rule**: Never use a column-agnostic `afun` in a heterogeneous column layout. Select a `junco` function built for that exact column topology:
-- Spanning arms + Risk/Rate/Mean Difference columns $\to$ `a_freq_j(..., riskdiff = TRUE, ref_path = ...)`, `a_eair100_j(..., riskdiff = TRUE, ref_path = ...)`, `a_diff_means(..., ref_path = ...)`, `a_summarize_ex_j(..., comp_btw_group = TRUE, ref_path = ...)`.
-- 3-column `[n/N (%), Mean, Mean CFB]` + optional Diff column $\to$ `a_summarize_aval_chg_diff_j`.
-- Stats-in-columns (`N`, `Mean`, `SD`, `SE`, `Med`, `Min`, `Max`) $\to$ `column_stats` (paired with `stats_in_cols_setup()`).
-- Sub-column conditional event filtering $\to$ `a_freq_subcol_j`.
-- Cumulative / period combo columns $\to$ `a_freq_combos_j`.
-- Proportions + Risk Diff + p-value in separate columns on the same row $\to$ `a_combo_prop_diff_pval_mf`.
-- `RESP01` arm proportions + Overall column RR/OR/p-value $\to$ `resp01_acfun`.
-- Expected / Received / Missing compliance columns $\to$ `cmp_cfun`.
-- Wide-format ANCOVA columns (Ref, Test, Variance, Comparison) $\to$ `lsmeans_wide_cfun`.
+- Spanning arms + Risk/Rate/Mean Difference columns → `a_freq_j(..., riskdiff = TRUE, ref_path = ...)`, `a_eair100_j(..., riskdiff = TRUE, ref_path = ...)`, `a_diff_means(..., ref_path = ...)`, `a_summarize_ex_j(..., comp_btw_group = TRUE, ref_path = ...)`.
+- 3-column `[n/N (%), Mean, Mean CFB]` + optional Diff column → `a_summarize_aval_chg_diff_j`.
+- Stats-in-columns (`N`, `Mean`, `SD`, `SE`, `Med`, `Min`, `Max`) → `column_stats` (paired with `stats_in_cols_setup()`).
+- Sub-column conditional event filtering → `a_freq_subcol_j`.
+- Cumulative / period combo columns → `a_freq_combos_j`.
+- Proportions + Risk Diff + p-value in separate columns on the same row → `a_combo_prop_diff_pval_mf`.
+- `RESP01` arm proportions + Overall column RR/OR/p-value → `resp01_acfun`.
+- Expected / Received / Missing compliance columns → `cmp_cfun`.
+- Wide-format ANCOVA columns (Ref, Test, Variance, Comparison) → `lsmeans_wide_cfun`.
 
 #### B. Conditionality Based on Row Facet
 > **RULE: IF the `afun`/`cfun` must suppress output, change statistics, or vary precision depending on the current row split level, THEN select a `junco` row-conditional function (see list below).**
@@ -124,12 +124,12 @@ Purely row-conditional `afun`s produce different numbers of rows, different stat
 - **Parameter-Specific Decimal Precision**: Formatting `ALT` to 2 decimals, `CRP` to 3 decimals, and `IGA` to 1 decimal based on the current `PARAMCD` row facet.
 
 **Selection Rule**: Use `junco`'s row-conditional mechanisms:
-- Exclude specific row split levels from output $\to$ `a_freq_j_with_exclude`, `a_summary_j_with_exclude`, `a_summarize_mmrm_with_exclude`, `a_cmhrms_j_with_exclude` (via `exclude_levels = list(VAR = c("LEV1", ...))`).
-- Exclude baseline visits from `BASE`/`CHG` columns $\to$ `column_stats(exclude_visits = c("BASELINE", "SCREENING"))` or `a_summarize_mmrm(ref_levels = list(visit = "BASELINE", arm = ...))`.
-- Selective 2-tier or 3-tier drill-down under specific levels $\to$ `a_two_tier(inner_var = ..., drill_down_levs = ...)` or `a_three_tier(...)`.
-- Vary decimal precision by row parameter $\to$ `formats_var = "fmt_d"` in `analyze()` / `column_stats` / `a_summary_subset`, or `d` in `a_summarize_aval_chg_diff_j`.
+- Exclude specific row split levels from output → `a_freq_j_with_exclude`, `a_summary_j_with_exclude`, `a_summarize_mmrm_with_exclude`, `a_cmhrms_j_with_exclude` (via `exclude_levels = list(VAR = c("LEV1", ...))`).
+- Exclude baseline visits from `BASE`/`CHG` columns → `column_stats(exclude_visits = c("BASELINE", "SCREENING"))` or `a_summarize_mmrm(ref_levels = list(visit = "BASELINE", arm = ...))`.
+- Selective 2-tier or 3-tier drill-down under specific levels → `a_two_tier(inner_var = ..., drill_down_levs = ...)` or `a_three_tier(...)`.
+- Vary decimal precision by row parameter → `formats_var = "fmt_d"` in `analyze()` / `column_stats` / `a_summary_subset`, or `d` in `a_summarize_aval_chg_diff_j`.
 
-#### C. Dual Conditionality (Simultaneous Row $\times$ Column Conditionality)
+#### C. Dual Conditionality (Simultaneous Row × Column Conditionality)
 In many clinical tables, column conditionality *itself* depends on the current row facet:
 - **Example 1 (Longitudinal Visits + Difference Columns)**: At `SCREENING` and `BASELINE`, the `Mean Change From Baseline` column and the `Difference in Mean Change` columns must be completely blank, whereas at `WEEK 1` through `WEEK 5` they are populated.
   - *Handled automatically by*: `a_summarize_aval_chg_diff_j` (when `advs[advs$ABLFL == "Y", "CHG"] <- NA`), `column_stats(exclude_visits = ...)`, and `a_summarize_mmrm`.
@@ -154,7 +154,7 @@ Use this decision matrix to map your table shell's analytical requirement to the
 | **Sub-Columns Filtering by Binary Flags within Each Arm (e.g., Serious / Related / All AEs, on-treatment / off-treatment)** | **`junco::a_freq_subcol_j`** | `afun` & `cfun` | Yes | `subcol_split`, `subcol_var`, `subcol_val` |
 | **Binary Flag (`"Y"`/`"N"`) Stratified by Categorical Variable + Risk Diff** | **`junco::a_freq_resp_var_j`** | `afun` & `cfun` | Yes | `resp_var = "TRTEMFL"`, `riskdiff = TRUE`, `ref_path`, `method` |
 | **Unique Subject Counts by Per-Subject Maximum of Ordinal Variable (e.g., worst severity grade, highest toxicity grade)** | **`junco::a_maxlev`** | `afun` & `cfun` | **No** | In `cfun`: `any_level = TRUE`, `any_level_exclude = "Missing"`. In `afun`: `any_level = FALSE`, `id = "USUBJID"` |
-| **Per-Subject Maximum of Ordinal Variable with Risk Differences (e.g., worst severity grade)** | **`junco::a_freq_j`** | `afun` & `cfun` | Yes | Pre-compute worst grade as a factor in data prep; analyze with `a_freq_j(..., riskdiff = TRUE, ref_path = ...)`. `a_maxlev` does not support diff columns |
+| **Per-Subject Maximum of Ordinal Variable with Risk Differences (e.g., worst severity grade)** | **`junco::a_freq_j`** | `afun` & `cfun` | Yes | Pre-compute worst grade as factor in data prep. `val = precomputed_grade_var`, `riskdiff = TRUE`, `ref_path` |
 | **2-Tier or 3-Tier Conditional Drill-Down within Single `analyze()`** | **`junco::a_two_tier`** / **`junco::a_three_tier`** | `afun` | Depends | `inner_var` (or `inner_var1`, `inner_var2`), `drill_down_levs`, `grp_fun = a_freq_j`, `detail_fun = a_freq_j` |
 | **Exposure-Adjusted Incidence Rate (EAIR per 100 PY) + Rate Diff** | **`junco::a_eair100_j`** | `afun` & `cfun` | Yes | `fup_var`, `occ_var`, `occ_dy`, `num_p_year = 100`, `conf_type_eair`, `conf_type_diff`, `riskdiff`, `ref_path` |
 | **Stratified EAIR (Study-Size Weighted) + Stratified Rate Diff** | **`junco::a_eair_strat_j`** | `afun` & `cfun` | Yes | `strata`, `fup_var`, `occ_var`, `occ_dy`, `num_p_year = 100`, `riskdiff`, `ref_path` |
@@ -182,38 +182,20 @@ Use this decision matrix to map your table shell's analytical requirement to the
 | **Simple Logical Proportion (`cfun`: count & `%` of `TRUE` relative to `.N_col`)** | **`junco::c_proportion_logical`** | `cfun` | No | Lightweight alternative to `a_proportion_ci_logical` when no CI is needed |
 | **Response Rate by Category Levels (`xx / xx (xx.x%)` for `resp_var == "Y"` across `.var` levels)** | **`junco::response_by_var`** | `afun` | No | `resp_var = "TRTEMFL"`. Denominator = non-missing observations of `.var` in `df`. No risk diff support; use `a_freq_resp_var_j` when diff columns are needed |
 | **Milestone Kaplan-Meier Survival (Event-Free Rate + 3D CI)** | **`junco::a_event_free`** | `afun` | No | `time_point`, `time_unit`, `is_event`, `percent = TRUE`, `.stats = "event_free_ci"` |
-| **Kaplan-Meier Median Survival / Quartiles / Cox Pairwise HR / Multivariable Cox Regression** | **`tern::a_surv_time`** / **`tern::coxph_pairwise`** / **`junco::tefos03_afun`** | `afun` / layout | No | `a_surv_time` and `coxph_pairwise` replace deprecated `a_kaplan_meier` and `a_coxph_hr`. `tefos03_afun` is the internal `afun` used by `summarize_coxreg_multivar()` for multivariable Cox model columns (`coef_se`, `pval`, `hr_est`, `hr_ci`) |
-| **RESP01 Response Table (Arm Proportions/CIs + Overall RR/OR/p-val)** | **`junco::resp01_acfun`**, **`resp01_a_comp_stat_logical`** / **`resp01_a_comp_stat_factor`**, & **`resp01_counts_cfun`** | `afun` & `cfun` | N/A | Pair with `resp01_split_fun_fct`; `methods`, `arm`, `strata`, `include_comp`. `resp01_a_comp_stat_logical`/`_factor` handle comparison statistics for logical/factor response variables |
+| **Kaplan-Meier Median Survival / Quartiles / Cox Pairwise HR / Multivariable Cox Regression** | **`tern::a_surv_time`** / **`tern::coxph_pairwise`** / **`junco::tefos03_afun`** | `afun` / layout | No | See S4 CAUTION for deprecation notes. `tefos03_afun`: `summarize_coxreg_multivar()` columns (`coef_se`, `pval`, `hr_est`, `hr_ci`) |
+| **RESP01 Response Table (Arm Proportions/CIs + Overall RR/OR/p-val)** | **`junco::resp01_acfun`**, **`resp01_a_comp_stat_logical`** / **`resp01_a_comp_stat_factor`**, & **`resp01_counts_cfun`** | `afun` & `cfun` | N/A | Pair with `resp01_split_fun_fct`; `methods`, `arm`, `strata`, `include_comp` |
 | **Study Visit Compliance Table (`Expected`, `Received`, `Missing`)** | **`junco::cmp_cfun`** | `cfun` | N/A | `variables = list(expected = ..., received = ..., missing = ...)` |
 | **Wide-Format ANCOVA LS Means Table** | **`junco::lsmeans_wide_cfun`** | `cfun` | N/A | `ref_level`, `treatment_levels`, `pval_sided`, `conf_level` |
-| **Blank Spacer Row in Layout** | **`junco::ac_blank_line`** | `afun` & `cfun` | N/A | Visual spacer only. Use as `afun` between substantive sections, or as `cfun` in `summarize_row_groups()` with `child_labels = "visible"`. Not a substitute for a real `afun` — see No-Op `analyze()` rule in [`row_struct_layout.md`](./row_struct_layout.md) |
+| **Blank Spacer Row in Layout** | **`junco::ac_blank_line`** | `afun` & `cfun` | N/A | Visual spacer only. See No-Op `analyze()` rule in [`row_struct_layout.md`](./row_struct_layout.md) |
 | **Row Count in `summarize_row_groups()` (from `df` or `alt_counts_df`)** | **`junco::c_row_counts`** / **`junco::c_row_counts_alt`** | `cfun` | No | Wrapped by `summarize_row_counts()`. `c_row_counts` counts rows in `df`; `c_row_counts_alt` counts rows in `.alt_df` |
 
 ---
 
-## 3.1 Post-Selection Escalation: Expert Usage Skills
+## 3.1 Post-Selection Escalation: Expert Skill Index
 
-Once you have identified the correct `afun`/`cfun` from the decision matrix above, check whether a **dedicated expert usage skill** exists for that function. Expert skills provide exhaustive parameter documentation, internal mechanics, worked examples, and gotcha catalogs that go far beyond what this selection guide covers.
+After selecting a function from the decision matrix above, look up its expert skill and section number below, then activate that skill for detailed parameterization, gotchas, and worked examples.
 
-**Escalation routing table:**
-
-| Selected Function(s) | Expert Skill Document | Covers |
-| :--- | :--- | :--- |
-| `a_freq_j`, `a_freq_j_with_exclude` | [`junco_a_freq_j_usage.md`](./junco_a_freq_j_usage.md) | All `.stats`, denominator control (`denom`, `denom_by`, `colgroup`, `countsource`), risk difference methods, level filtering/manipulation (`val`, `drop_levels`, `excl_levels`, `new_levels`), `label_map` (4 modes), `restr_columns`, formatting, internal mechanics, 13 gotchas |
-| `a_eair100_j`, `a_eair_strat_j`, `a_patyrs_j` | [`junco_eair_family_usage.md`](./junco_eair_family_usage.md) | Person-years calculation, 11 statistics each, horizontal/vertical risk diff layouts, 4 rate CI methods, 4 difference CI methods, `occ_var`/`occ_dy`/`fup_var` wiring, 5 worked examples, 8 gotchas |
-| `a_summarize_aval_chg_diff_j` | [`junco_a_summarize_aval_chg_diff_j_usage.md`](./junco_a_summarize_aval_chg_diff_j_usage.md) | Per-column `.stats`/`.formats` as named lists (`col1`, `col23`, `coldiff`), `split_cols_by_multivar` integration, descriptive vs ANCOVA mode, sparse data handling, combined group support, 3 examples, 8 gotchas |
-| `a_cond_proportion_j`, `a_proportion_diff_mf`, `a_test_proportion_diff_mf` | [`junco_adaptive_proportion_diff_usage.md`](./junco_adaptive_proportion_diff_usage.md) | Adaptive method selection, Mantel-Fleiss criterion, footnote injection, CMH method options, combined usage pattern, 10 gotchas |
-| All other `junco` `afun`s and `cfun`s | [`junco_other_afuns_usage.md`](./junco_other_afuns_usage.md) | `a_freq_combos_j`, `a_freq_subcol_j`, `a_freq_resp_var_j`, `a_maxlev`, `a_two_tier`/`a_three_tier`, `a_summarize_ex_j`, `column_stats`, `a_diff_means`, `a_summary_j_with_exclude`, `a_summary_subset`/`c_summary_subset_label`, `a_sum_ratio_j`, `a_summarize_ancova_j`, `a_summarize_mmrm`/`a_summarize_mmrm_with_exclude`, `a_lsmeans`, `a_rbmi_lsmeans`, `a_proportion_ci_logical`/`a_proportion_ci_factor`, `a_proportion_diff_j`, `a_test_proportion_diff`, `a_combo_prop_diff_pval_mf`, `a_odds_ratio_j`, `a_relative_risk`, `a_cmhrms_j`/`a_cmhrms_j_with_exclude`, `prop_table_afun`, `c_proportion_logical`, `a_event_free`, `tefos03_afun`, `response_by_var`, `resp01_acfun`/`resp01_a_comp_stat_logical`/`resp01_a_comp_stat_factor`/`resp01_counts_cfun`, `cmp_cfun`, `lsmeans_wide_cfun`, `c_row_counts`/`c_row_counts_alt`, `ac_blank_line` |
-
-**Escalation rule**: After selecting a function from the decision matrix, **activate the linked expert skill** from the table above for detailed parameterization and usage guidance.
-
-> Note: This escalation is independent of the `[custom_afuns.md](./custom_afuns.md)` escalation, which applies only when **no** existing function satisfies the requirement (see Section 7, item 5).
-
----
-
-## 4. Function → Expert Skill Index
-
-Alphabetical lookup from function name to its expert skill document. For full parameter tables, statistics, and usage guidance, activate the linked skill after selecting a function from the Section 3 decision matrix.
+> Note: This escalation is independent of the `[custom_afuns.md](./custom_afuns.md)` escalation, which applies only when **no** existing function satisfies the requirement (see Section 6, item 5).
 
 | Function | Expert Skill | § |
 | :--- | :--- | :--- |
@@ -273,9 +255,9 @@ Alphabetical lookup from function name to its expert skill document. For full pa
 > - `junco::a_coxph_hr` was deprecated in `junco 0.1.7` (`lifecycle::deprecate_stop`). Use **`tern::coxph_pairwise()`** / `tern:::a_coxph_pairwise()` instead.
 > - `junco::a_kaplan_meier` was deprecated in `junco 0.1.7` (`lifecycle::deprecate_stop`). Use **`tern::a_surv_time()`** instead.
 
-## 5. Cross-Cutting Configuration Mechanisms in `junco`
+## 4. Cross-Cutting Configuration Mechanisms in `junco`
 
-### 5.1 Wiring Reference Groups via `ref_path` & `get_ref_info()`
+### 4.1 Wiring Reference Groups via `ref_path` & `get_ref_info()`
 
 Standard `rtables` `ref_group` only works within a single flat `split_cols_by()` call. In clinical tables with spanning headers (e.g., `"Active Study Agent"` vs `" "`) or non-nested Risk Difference columns, `junco` analysis functions locate the control arm using **`ref_path`**:
 
@@ -292,9 +274,9 @@ Standard `rtables` `ref_group` only works within a single flat `split_cols_by()`
 
 ---
 
-### 5.2 Dynamic & Parameter-Specific Decimal Precision (`formats_d` & `format_sigfig_j`)
+### 4.2 Dynamic & Parameter-Specific Decimal Precision (`formats_d` & `format_sigfig_j`)
 
-Clinical laboratory (`ADLB`), vital signs (`ADVS`), and pharmacokinetic (`ADPC`) tables often require different decimal precision ($d$) for each parameter (`PARAMCD`) or variable. `junco` provides three ways to configure dynamic precision without writing custom `afun`s:
+Clinical laboratory (`ADLB`), vital signs (`ADVS`), and pharmacokinetic (`ADPC`) tables often require different decimal precision (d) for each parameter (`PARAMCD`) or variable. `junco` provides three ways to configure dynamic precision without writing custom `afun`s:
 
 #### Pattern A: Multiple Analyzed Variables with Different Precision (e.g., Demography Table)
 Use `fmt_spec_var_d()` and pass the resulting list to the `format` argument of `analyze()`, with `.formats = "default"` inside `extra_args`:
@@ -344,11 +326,11 @@ basic_table() |>
 ```
 
 #### Pattern C: Significant Figures (`format_sigfig_j`)
-For PK/PD tables requiring $k$ significant figures instead of fixed decimals, pass `format_sigfig_j(k)` in `.formats` or inside `fmt_d_def` with `fmt_spec_df_d()`.
+For PK/PD tables requiring k significant figures instead of fixed decimals, pass `format_sigfig_j(k)` in `.formats` or inside `fmt_d_def` with `fmt_spec_df_d()`.
 
 ---
 
-## 6. Canonical Layout Wiring Recipes
+## 5. Canonical Layout Wiring Recipes
 
 ### Recipe 1: Adverse Event Incidence Table with Spanning Headers & Risk Differences (`a_freq_j` as `afun` and `cfun`)
 
@@ -453,7 +435,7 @@ tbl <- build_table(lyt, advs, alt_counts_df = adsl)
 
 ---
 
-## 7. Diagnostic Checklist & Escalation Path
+## 6. Diagnostic Checklist & Escalation Path
 
 > **RULE: IF a selected function produces unexpected output, THEN the failure is more likely a parameterization error than a capability gap. Re-examine `.var`, `.stats`, `val`/`label`, and `denom`/`denom_by` before escalating to `[custom_afuns.md](./custom_afuns.md)`.**
 
@@ -465,9 +447,9 @@ Before finalizing your `afun`/`cfun` selection, verify all items:
 3. **Column Conditionality Match**: If the layout has non-nested comparison columns or multi-variable sub-columns, does the selected `afun`/`cfun` accept `ref_path` / `riskdiff` / `comp_btw_group` / `multivars` / `colpaths` to populate each column branch appropriately? **All `tern` functions and `junco::a_maxlev` lack built-in difference column support.** If the layout includes difference columns, either select a `junco` function that supports `riskdiff`/`ref_path` (check the "Diff Col" column in Sections 3–4), or wrap the selected function using the column-dispatch (Pattern 2A) or `get_ref_info()` bridge (Tier 4) patterns from `[custom_afuns.md](./custom_afuns.md)`.
 4. **Row Conditionality Match**: Are baseline/screening visits or excluded factor levels properly suppressed via `exclude_visits`, `exclude_levels`, `a_*_with_exclude`, or `a_two_tier(drill_down_levs = ...)`?
 5. **Post-Selection Escalation** (two independent decision points):
-   - **A suitable function WAS identified** → Check the Section 3.1 routing table and activate the linked expert skill for detailed parameterization, gotchas, and worked examples.
+   - **A suitable function WAS identified** → Check the Section 3.1 expert skill index and activate the linked expert skill for detailed parameterization, gotchas, and worked examples.
    - **No suitable function was identified** → Escalate to `[custom_afuns.md](./custom_afuns.md)` (prioritizing `make_afun()`, `RowsVerticalSection` stacking/dispatch, and `get_ref_info()` over bespoke code) when the table shell requires:
-     - A bespoke statistical calculation or custom cell structure not present in `junco` or `tern` (see Section 4 Function → Expert Skill Index to verify coverage).
+     - A bespoke statistical calculation or custom cell structure not present in `junco` or `tern` (see Section 3.1 to verify coverage).
      - Arbitrary column-facet dispatch across heterogeneous sibling column branches not covered by `junco`'s built-in risk/mean difference, `a_summarize_aval_chg_diff_j`, `column_stats`, `a_combo_prop_diff_pval_mf`, `resp01_acfun`, `cmp_cfun`, or `lsmeans_wide_cfun` patterns.
      - Custom multi-ancestor denominator arithmetic inspecting `.spl_context$full_parent_df` beyond `n_parentdf` and `denom_by`.
 

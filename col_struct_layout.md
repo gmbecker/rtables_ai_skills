@@ -57,7 +57,7 @@ Use this lookup table to map a target visual header structure to the recommended
 | **"Some vs All" / Non-Mutually Exclusive Cohort Subsets** (e.g. All AEs vs Related AEs, All Grades vs High Grade) | **`some_v_all_col_struct(colspan_trt_map, subgrp_var, subgrp_lvls, all_lbl, subgrp_lbl)`** | `make_split_fun(post = list(add_overall_facet, add_combo_facet, restrict_facets))` |
 | **Single categorical header** (`Arm A \| Arm B \| Arm C`) | Standard column split: `split_cols_by("ARM")` | — |
 | **Arms + Trailing/Leading Total** (`Arm A \| Arm B \| Total`) | `split_cols_by("ARM", split_fun = add_overall_level("Total", first = FALSE))` or `add_overall_col("Total")` | — |
-| **Conditional Overall Column** (only add Total if $\ge 2$ facets exist) | Custom split function checking `length(vals) > 1` | — |
+| **Conditional Overall Column** (only add Total if >=2 facets exist) | Custom split function checking `length(vals) > 1` | — |
 | **Multi-level Factorial Hierarchy** (`Arm -> Sex -> Smoke` or `Arm -> Visit`) | Chained nested `split_cols_by` calls | — |
 | **Measure-First vs. Arm-First** (`Param 1 [Arm A \| Arm B]` vs `Arm A [Param 1 \| Param 2]`) | Order of `split_cols_by_multivar` vs `split_cols_by` | — |
 | **Longitudinal Visits with Conditional Subcolumns** (`Baseline [Obs] \| Week 1 [Obs \| CFB]`) | `split_cols_by("AVISIT") \|> split_cols_by_multivar(c("AVAL", "CHG"), split_fun = make_split_fun(post = list(drop_cfb_at_baseline)))` | — |
@@ -67,7 +67,7 @@ Use this lookup table to map a target visual header structure to the recommended
 | **Pooled / Combined Cohorts** (`Low \| High \| Pooled Active`) | `add_combo_levels(combodf)` or `add_combo_facet` | — |
 | **Per-Parent Data-Driven Quantiles** (Cutpoints recomputed within each Arm) | `make_split_fun(core_split = per_facet_qrt_core("AGE"))` | — |
 | **Overlapping Multi-Variable Predicate Columns** (`Safety \| ITT \| Age >= 65 \| Biomarker High`) | Custom `core_split` evaluating a named list of quoted expressions via `eval(p, df)` | — |
-| **Top-$k$ Frequent Levels + Pooled "Other" Column** | `make_split_fun(post = list(top_k_plus_other_post))` | — |
+| **Top-k Frequent Levels + Pooled "Other" Column** | `make_split_fun(post = list(top_k_plus_other_post))` | — |
 
 When no suitable match is found, escalate to semantic decoding of the specific desired topology.
 

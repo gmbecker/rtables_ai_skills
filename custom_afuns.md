@@ -16,82 +16,35 @@ Before writing a custom function body, evaluate your requirement against these s
 
 > **RULE: Before writing ANY custom function, exhaust Tiers 0–4 in order. The most common premature-escalation pattern is: one parameterization of a correct function fails → the function is declared inadequate → a bespoke Tier 5 function is written.**
 
-```
-Need specific cell values, row labels, formats, or conditional behavior in analyze() / summarize_row_groups()?
- │
- ├─► Tier 0: Does an existing `junco` or `tern` function already produce the correct
- │           CELLS, with the only gap being a missing section-header label row above
- │           the analysis block?
- │     └──► YES: The function satisfies the requirement as-is. Use it directly with
- │               `var_labels = "...", show_labels = "visible"` on the `analyze()` call.
- │               Do NOT write a custom function or wrapper. Defer to `[select_afuns.md](./select_afuns.md)`.
- │
- ├─► Tier 1: Parameter Space Search — Can an existing function satisfy the requirement
- │           under SOME parameterization?
- │     Tier 1 is not a single check — it is a **search over the joint parameter space**
- │     of (function, `.var`, `.stats`, `extra_args`, data-prep-derived variables).
- │     A single failed parameterization does not exhaust Tier 1. Before concluding that
- │     no existing function can satisfy the requirement:
- │     1. **Identify candidate functions** from the select_afuns.md decision matrix (Section 3).
- │        There may be more than one.
- │     2. **For each candidate, enumerate the parameter dimensions** that could vary.
- │        Use the **function index** (select_afuns.md Section 4) and the **expert
- │        usage skills** (routed via select_afuns.md Section 3.1) as the lookup tables
- │        for valid values in each dimension — they list every supported `.stats` value,
- │        every `denom` option, and every `extra_args` key per function:
- │        - `.var`: Could a different variable (especially a binary flag derived in data
- │          prep) produce the correct row structure?
- │        - `.stats`: Could a different statistic produce the correct cell values?
- │          (Consult the "Statistics Supported (`.stats`)" column in the Section 4 catalog.)
- │        - `extra_args`: Could `val`, `label`, `denom`, `denom_by`, `exclude_levels`,
- │          or other configuration arguments close the gap? (Consult the
- │          "Other Customization (`extra_args`)" column in the Section 4 catalog and
- │          the expert usage skills routed via Section 3.1.)
- │        - Data prep: Could deriving a new variable (flag, recoded factor, bucketed
- │          continuous) make the function work?
- │     3. **If an attempt fails, diagnose which dimension caused the failure** before
- │        trying another combination or escalating. The most common misdiagnosis is
- │        attributing a failure to a function's capability when the actual cause is the
- │        choice of `.var` or a missing `val`/`label` argument.
- │     4. **Record the search** in the implementation log (see Section 1.1).
- │     Only escalate to Tier 2 when you can state a **specific capability gap** that no
- │     parameterization of any candidate function can bridge — not merely that one
- │     parameterization produced wrong output.
- │     └──► YES (any parameterization works): Do NOT write a custom function.
- │               Defer to `[select_afuns.md](./select_afuns.md)`.
- │               (If the only remaining gap is a missing section-header label, see Tier 0.)
- │
- ├─► Tier 2: Does an existing `s_*` or `a_*` function compute the right values,
- │           but you need fixed subsetting of `.stats`, custom `.formats`/`.labels`/`.indent_mods`,
- │           ungrouped list stats (`.ungroup_stats`), or curried default arguments?
- │     └──► YES: Wrap the existing function with `rtables::make_afun()` (or `list_wrap_x()` / `list_wrap_df()`).
- │               See Section 2.
- │
- ├─► Tier 3: Can the desired output be built by calling one or more EXISTING `afun`/`cfun`s
- │           and combining, selecting between, or tweaking their returned `RowsVerticalSection` objects?
- │     ├─► Different column branches require different behaviors (e.g., summary stats in Arm cols, difference stats or blank cells in Diff cols)
- │     │   that no single existing function handles natively?
- │     │     └──► Decompose by column branch, run the `afun` selection/escalation pipeline independently per branch,
- │     │          and combine with a Column-Conditional Dispatch Wrapper (Section 3.2).
- │     ├─► Multiple existing `afun`s stacked vertically in the same facet (e.g., Total Events + Unique Subjects)?
- │     │     └──► Use Vertical Stacking with `c(rvs1, rvs2)` (Section 3.3).
- │     ├─► Existing `afun` output needs post-hoc label, indent, format, or footnote tweaks?
- │     │     └──► Modify the returned `RowsVerticalSection` via accessors (`indent_mod<-`, `obj_format<-`) (Section 3.4).
- │     └─► Drill-down / secondary variable analysis under only specific levels or row facets
- │         (and `junco::a_two_tier` doesn't fit)?
- │           └──► Use Conditional Stacking with `lapply()` + `c()` + `indent_mod<-` (Section 3.5).
- │
- ├─► Tier 4: Does an existing `afun` expect `.ref_group` and `.in_ref_col`, but your table uses
- │           a nested/spanned column tree (`ref_path`) or an Overall column that breaks standard `ref_group`?
- │     └──► YES: Write a 3-line adapter using `junco::get_ref_info(ref_path, .spl_context, .var)`
- │               and delegate to the existing `afun` (Section 4).
- │
- └─► Tier 5: None of the above apply (genuinely novel statistical calculation or bespoke multi-ancestor logic).
-       └──► Requires non-trivial novel statistical calculations beyond e.g., counts and percents?
-       │    └──► YES: write a dummy function which warns the user and emits the correct number of rows. **DO NOT implement statistical calculations on your own**
-       └──► Write a clean custom `afun`/`cfun` using `in_rows()`, `rcell()`, `.spl_context`,
-            and reusable behavioral building blocks (Sections 5–7).
-```
+Evaluate each tier in order. Stop at the first tier that solves the problem.
+
+0. **Tier 0 — Label-Only Gap**: IF an existing `junco` or `tern` function already produces the correct CELLS, with the only gap being a missing section-header label row above the analysis block, THEN the function satisfies the requirement as-is. Use it directly with `var_labels = "...", show_labels = "visible"` on the `analyze()` call. Do NOT write a custom function or wrapper. Defer to `[select_afuns.md](./select_afuns.md)`.
+
+1. **Tier 1 — Parameter Space Search**: IF an existing function can satisfy the requirement under SOME parameterization, THEN use it directly. Defer to `[select_afuns.md](./select_afuns.md)`. (If the only remaining gap is a missing section-header label, see Tier 0.)
+   - Tier 1 is not a single check — it is a **search over the joint parameter space** of (function, `.var`, `.stats`, `extra_args`, data-prep-derived variables). A single failed parameterization does not exhaust Tier 1. Before concluding that no existing function can satisfy the requirement:
+     1. **Identify candidate functions** from the select_afuns.md decision matrix (Section 3). There may be more than one.
+     2. **For each candidate, enumerate the parameter dimensions** that could vary. Use the **expert skill index** (select_afuns.md Section 3.1) as the lookup table for valid values in each dimension — it routes to expert usage skills that list every supported `.stats` value, every `denom` option, and every `extra_args` key per function:
+        - `.var`: Could a different variable (especially a binary flag derived in data prep) produce the correct row structure?
+        - `.stats`: Could a different statistic produce the correct cell values?
+        - `extra_args`: Could `val`, `label`, `denom`, `denom_by`, `exclude_levels`, or other configuration arguments close the gap?
+        - Data prep: Could deriving a new variable (flag, recoded factor, bucketed continuous) make the function work?
+     3. **If an attempt fails, diagnose which dimension caused the failure** before trying another combination or escalating. The most common misdiagnosis is attributing a failure to a function's capability when the actual cause is the choice of `.var` or a missing `val`/`label` argument.
+     4. **Record the search** in the implementation log (see Section 1.1).
+   - Only escalate to Tier 2 when you can state a **specific capability gap** that no parameterization of any candidate function can bridge — not merely that one parameterization produced wrong output.
+
+2. **Tier 2 — `make_afun()` Wrapper**: IF an existing `s_*` or `a_*` function computes the right values, but you need fixed subsetting of `.stats`, custom `.formats`/`.labels`/`.indent_mods`, ungrouped list stats (`.ungroup_stats`), or curried default arguments, THEN wrap the existing function with `rtables::make_afun()` (or `list_wrap_x()` / `list_wrap_df()`). See Section 2.
+
+3. **Tier 3 — Combine Existing `afun`s via `RowsVerticalSection`**: IF the desired output can be built by calling one or more EXISTING `afun`/`cfun`s and combining, selecting between, or tweaking their returned `RowsVerticalSection` objects, THEN use one of these patterns:
+   - **Column-conditional dispatch** (different column branches need different behaviors) → Section 3.2.
+   - **Vertical stacking** (multiple existing `afun`s stacked in the same facet) → `c(rvs1, rvs2)`, Section 3.3.
+   - **Post-call modification** (existing `afun` output needs label, indent, format, or footnote tweaks) → `RowsVerticalSection` accessors, Section 3.4.
+   - **Conditional stacking / drill-down** (secondary variable analysis under specific levels, and `junco::a_two_tier` doesn't fit) → `lapply()` + `c()` + `indent_mod<-`, Section 3.5.
+
+4. **Tier 4 — `get_ref_info()` Bridge**: IF an existing `afun` expects `.ref_group` and `.in_ref_col`, but your table uses a nested/spanned column tree (`ref_path`) or an Overall column that breaks standard `ref_group`, THEN write a 3-line adapter using `junco::get_ref_info(ref_path, .spl_context, .var)` and delegate to the existing `afun`. See Section 4.
+
+5. **Tier 5 — Bespoke Custom Function**: None of the above apply (genuinely novel statistical calculation or bespoke multi-ancestor logic).
+   - IF the requirement involves non-trivial novel statistical calculations beyond e.g., counts and percents, THEN write a dummy function which warns the user and emits the correct number of rows. **DO NOT implement statistical calculations on your own.**
+   - Otherwise, write a clean custom `afun`/`cfun` using `in_rows()`, `rcell()`, `.spl_context`, and reusable behavioral building blocks (Sections 5–7).
 
 > [!IMPORTANT]
 > **Leading Section-Header Invariant (ALL tiers 1–5)**: If the custom `afun` needs a leading label-only header row (blank cells with a visible stub label) as the first row of its output, do **not** emit it via `rcell(NULL)` inside the `afun`. Instead, use `var_labels = "Header Text", show_labels = "visible"` on the `analyze()` call — this is Tier 0, not a reason to write a custom function. `rcell(NULL)` inside an `afun` is only permitted for label-only rows **interspersed among** analysis rows (see Building Block 6, Section 7).
@@ -260,7 +213,7 @@ return(rvs)
 ```
 
 #### Special-case: All Blank Cells in Select Columns
-Emit cells with `NULL` or `""` values to create blank cells across all $k$ rows in a column branch:
+Emit cells with `NULL` or `""` values to create blank cells across all k rows in a column branch:
 ```r
 col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
   if (in_diff_col(.spl_context)) {
@@ -278,11 +231,11 @@ col_dispatch_afun2 <- function(df, .var, ..., .spl_context) {
 
 > [!IMPORTANT]
 > **Mandatory Row-Count Invariant Across Columns**:
-> For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns $k$ rows (e.g., `n` plus 4 factor levels = 5 rows), the `alt_behavior_afun` branch must also return $k$ rows in the same order (using `rcell(NULL)` padding for rows where no comparison statistic applies, as shown above).
+> For any given row facet, `col_dispatch_afun` is called once per column and **MUST return the exact same number of rows in every column**. If `main_behavior_afun` returns k rows (e.g., `n` plus 4 factor levels = 5 rows), the `alt_behavior_afun` branch must also return k rows in the same order (using `rcell(NULL)` padding for rows where no comparison statistic applies, as shown above).
 
 ### 3.3 Pattern 2B: Vertical Stacking of Existing `afun`s (`c(rvs1, rvs2)`)
 
-In `rtables` ($\ge 0.6.16$), `RowsVerticalSection` objects have a native `c()` method (`c.RowsVerticalSection`) that concatenates multiple `in_rows()` outputs while preserving all row names, labels, indent modifiers, formats, footnotes, and `NA` strings.
+In `rtables` (>= 0.6.16), `RowsVerticalSection` objects have a native `c()` method (`c.RowsVerticalSection`) that concatenates multiple `in_rows()` outputs while preserving all row names, labels, indent modifiers, formats, footnotes, and `NA` strings.
 
 Use vertical stacking when a single facet needs rows from two or more distinct `afun`s (for example, stacking a total event count row above a unique-subject frequency row, or stacking two `junco`/`tern` summaries on different variables within the same facet):
 
@@ -344,7 +297,7 @@ Sometimes a table displays a primary summary for every level of `.var` (e.g., en
 
 > [!TIP]
 > **Check `junco::a_two_tier` First!**
-> For production tables requiring a two-tier drill-down (like `EOSSTT` $\rightarrow$ `DCSREAS` or `AEBODSYS` $\rightarrow$ `AEDECOD` inside a single `analyze()` call), always use `junco::a_two_tier` first (see `[select_afuns.md](./select_afuns.md)`). Write a custom conditional stacking `afun` only when `a_two_tier` cannot support your specific inner analysis function.
+> For production tables requiring a two-tier drill-down (like `EOSSTT` → `DCSREAS` or `AEBODSYS` → `AEDECOD` inside a single `analyze()` call), always use `junco::a_two_tier` first (see `[select_afuns.md](./select_afuns.md)`). Write a custom conditional stacking `afun` only when `a_two_tier` cannot support your specific inner analysis function.
 
 When you do need a custom two-tier or row-conditional stacking wrapper, iterate over levels (or check `.spl_context`), call existing `afun`s for both tiers, adjust `indent_mod(det_rvs) <- 1L`, and combine with `c()`:
 
@@ -374,7 +327,7 @@ custom_two_tier_afun <- function(df, .var, .spl_context, detail_var, detail_leve
 
 ## 4. Tier 4: Bridging Existing Comparative `afun`s to Nested Column Trees (`get_ref_info`)
 
-Many comparative analysis functions (including `tern` functions and functions built with `make_afun` using `.ref_group` and `.in_ref_col`) assume `rtables` automatically populates `.ref_group` and `.in_ref_col`. However, `rtables`' built-in `ref_group` argument on `split_cols_by()` only works within a single flat column split—it cannot resolve a reference arm across **nested spanning headers** (e.g., `"Active Study Agent"` vs `" "` $\rightarrow$ `"B: Placebo"`) or when an **Overall/Total column** is added via `add_overall_col()`.
+Many comparative analysis functions (including `tern` functions and functions built with `make_afun` using `.ref_group` and `.in_ref_col`) assume `rtables` automatically populates `.ref_group` and `.in_ref_col`. However, `rtables`' built-in `ref_group` argument on `split_cols_by()` only works within a single flat column split—it cannot resolve a reference arm across **nested spanning headers** (e.g., `"Active Study Agent"` vs `" "` → `"B: Placebo"`) or when an **Overall/Total column** is added via `add_overall_col()`.
 
 Instead of rewriting an existing `.ref_group`-based `afun`, wrap it in a 3-line adapter using **`junco::get_ref_info()`**:
 
@@ -468,11 +421,11 @@ template_acfun <- function(df,               # Or `x` if only the single analyze
 
 | Category | Special Argument | Type | What It Contains & Critical Caveats |
 | :--- | :--- | :--- | :--- |
-| **Primary Input** | `x` *(1st arg)* | `vector` | The facet subset vector `df[[.var]]` for the current row $\times$ column cell. Mutually exclusive with `df` as 1st arg. |
-| **Primary Input** | `df` *(1st arg)* | `data.frame` | The facet subset `data.frame` (all columns) for the current row $\times$ column cell. Required if your function inspects multiple variables (e.g., `USUBJID` + `.var`). |
+| **Primary Input** | `x` *(1st arg)* | `vector` | The facet subset vector `df[[.var]]` for the current row × column cell. Mutually exclusive with `df` as 1st arg. |
+| **Primary Input** | `df` *(1st arg)* | `data.frame` | The facet subset `data.frame` (all columns) for the current row × column cell. Required if your function inspects multiple variables (e.g., `USUBJID` + `.var`). |
 | **Group Label** | `labelstr` *(2nd arg)* | `character(1)` | Passed **only** to `cfun` in `summarize_row_groups()`; contains the current row-group split value label. Always set default `labelstr = NULL` if dual-use. |
 | **Variable Name** | `.var` | `character(1)` | Name of the variable currently being analyzed in `analyze(vars = ...)`. |
-| **Marginal Counts** | `.N_col` | `integer(1)` | Column-wise $N$ for the current column. **Uses `alt_counts_df` (e.g., `ADSL`) when provided to `build_table()`!** |
+| **Marginal Counts** | `.N_col` | `integer(1)` | Column-wise N for the current column. **Uses `alt_counts_df` (e.g., `ADSL`) when provided to `build_table()`!** |
 | **Marginal Counts** | `.all_col_counts` | `integer` vector | Named vector of column counts across *all* columns in the table (uses `alt_counts_df` when provided). |
 | **Marginal Counts** | `.N_row` | `integer(1)` | Row-wise observation count across all columns for the current row facet. **WARNING**: `.N_row` is **ALWAYS calculated from primary `df`**, NEVER from `alt_counts_df`! In an event-level table (e.g., `ADAE`) with a subject-count `alt_counts_df`, `.N_col` counts *subjects* while `.N_row` counts *event records*. |
 | **Marginal Counts** | `.N_total` | `integer(1)` | **DO NOT USE.** Naively sums `.all_col_counts`, which double-counts whenever a table has an Overall column, overlapping subgroups, or Risk Difference columns. Instead, use `NROW(.spl_context$full_parent_df[[1]])` (for primary `df`) or `NROW(.alt_df_full)` (for `alt_counts_df`). |
@@ -487,12 +440,16 @@ template_acfun <- function(df,               # Or `x` if only the single analyze
 | **Split Context** | `.spl_context` | `data.frame` | Complete ancestry of row splits and current column coordinates. See Section 6. |
 
 > [!WARNING]
-> **Confusingly Similar Special Argument Names**
-> Several special arguments have similar names but different scoping. Including the wrong one causes "unused argument" errors (if forwarded via `...`) or silently receives wrong data. Common confusions:
-> - **`.alt_df`** vs **`.alt_df_full`** vs **`.alt_df_row`**: `.alt_df` = `alt_counts_df` subsetted by both row and column; `.alt_df_full` = entire unsplit `alt_counts_df`; `.alt_df_row` = `alt_counts_df` subsetted by row splits only. Most `junco` frequency functions (e.g., `a_freq_j`) use **`.alt_df_full`**, not `.alt_df`.
-> - **`.df_row`** vs **`df`**: `.df_row` = full row-facet data across all columns; `df` = column-sliced data for the current cell. `.df_row` is commonly needed by `junco` functions for denominator calculations.
-> - **`.ref_group`** vs **`.ref_full`**: `.ref_group` = reference column data for current row facet; `.ref_full` = full reference column data ignoring row splits.
-> - **`.N_col`** vs **`.N_row`** vs **`.N_total`**: `.N_col` uses `alt_counts_df` when provided; `.N_row` always uses primary `df`; `.N_total` is unreliable (double-counts with Overall/diff columns).
+> **Confusingly Similar Special Argument Names** — Including the wrong one causes "unused argument" errors or silently wrong data:
+>
+> | Argument | Scope | Common Confusion |
+> |---|---|---|
+> | `.alt_df` | `alt_counts_df` subsetted by row + column | Most `junco` functions use **`.alt_df_full`**, not `.alt_df` |
+> | `.alt_df_full` | Entire unsplit `alt_counts_df` | |
+> | `.alt_df_row` | `alt_counts_df` subsetted by row splits only | |
+> | `.df_row` | Full row-facet data across all columns | Not the same as `df` (column-sliced) |
+> | `.ref_group` | Reference column data for current row facet | `.ref_full` ignores row splits |
+> | `.N_col` | Column N (uses `alt_counts_df` when provided) | `.N_row` always uses primary `df`; `.N_total` is unreliable |
 
 ---
 
@@ -505,9 +462,9 @@ The `.spl_context` `data.frame` gives an `afun` or `cfun` complete visibility in
 `.spl_context` has **one row per row-faceting step** from the root of the table (`row 1`, where `split == "root"`) down to the immediate parent row split of the current `analyze()` or `summarize_row_groups()` call (`row NROW(.spl_context)`).
 
 1. **Columns that VARY across rows of `.spl_context` (Row-Split Ancestry)**:
-   - `split` (`character`): Name of the row split at step $i$ (e.g., `"root"`, `"AEBODSYS"`, `"AEDECOD"`).
-   - `value` (`character`): String value of the facet at step $i$ (e.g., `"root"`, `"Cardiac disorders"`, `"Atrial fibrillation"`).
-   - `full_parent_df` (`list` of `data.frame`s): The primary dataset `df` subsetted down to row-split step $i$ (across **all** columns).
+   - `split` (`character`): Name of the row split at step i (e.g., `"root"`, `"AEBODSYS"`, `"AEDECOD"`).
+   - `value` (`character`): String value of the facet at step i (e.g., `"root"`, `"Cardiac disorders"`, `"Atrial fibrillation"`).
+   - `full_parent_df` (`list` of `data.frame`s): The primary dataset `df` subsetted down to row-split step i (across **all** columns).
    - `all_cols_n` (`integer`): Observation count in `full_parent_df[[i]]`.
    - `<col_id>` (one `list` column per leaf column in the table, named by `names(col_exprs(tab))`): Contains a `logical` vector of length `NROW(full_parent_df[[i]])` indicating which rows of `full_parent_df[[i]]` belong to that column.
 
@@ -609,7 +566,7 @@ get_or_fit_model <- function(df, cov_key, cache_env) {
 
 ### Building Block 4: Per-Column Argument Injection via `split_cols_by_multivar(..., extra_args = ...)`
 
-When using `split_cols_by_multivar()`, passing a named `list` to `extra_args` where each element is a vector/list of length equal to `length(vars)` automatically dispatches the $j$-th element to the $j$-th column in all downstream `cfun` and `afun` calls:
+When using `split_cols_by_multivar()`, passing a named `list` to `extra_args` where each element is a vector/list of length equal to `length(vars)` automatically dispatches the j-th element to the j-th column in all downstream `cfun` and `afun` calls:
 
 ```r
 my_stats <- list("n", "hr", c("lcl", "ucl"), "pval")
@@ -637,7 +594,7 @@ Understanding `rtables` format precedence is essential when deciding whether to 
 1. **Highest Precedence**: `.formats` in `in_rows()` (overwrites cell formats set in `rcell()`).
 2. **Second Precedence**: `format` in `rcell()`.
 3. **Third Precedence**: `format` or `formats_var` in `analyze()` / `summarize_row_groups()`.
-4. **Lowest Precedence**: Parent split format $\rightarrow$ default `"xx"`.
+4. **Lowest Precedence**: Parent split format → default `"xx"`.
 
 > [!IMPORTANT]
 > **How to Support `analyze(..., format = ...)` and `formats_var` in Custom `afun`s**:
@@ -670,21 +627,13 @@ analyze(
 
 The `afun` then emits only the data rows (no leading label row). This works for all stacked `analyze()` sections in Archetype 1 layouts.
 
-> [!TIP]
-> **No custom function needed just for a section header**: If an existing `junco` or `tern` afun already produces the correct cells and the only thing missing is a leading label row above the block, use the existing afun directly in `analyze()` with `var_labels` and `show_labels` — do not write a wrapper or custom function solely to add a header row.
-
 #### When `rcell(NULL)` inside an `afun` IS permitted (interspersed labels only)
 
 Use `in_rows("label" = rcell(NULL, format = "xx"))` **only** when a label-only row must appear *between* analysis rows within a single `analyze()` call — for example, when a custom afun emits rows from two different sub-sections and needs an internal divider label between them.
 
 > [!WARNING]
 > **Stacking + Interspersed Labels = Row Structure Smell**
-> If a custom afun stacks calls to existing afuns (Pattern 2B) with `rcell(NULL)` label rows interspersed between them to create named sections, this is a signal that the row structure is being encoded in the wrong place. Before writing such an afun, go back to the row layout (row_struct_layout.md) and determine whether the sections can be expressed as **separate `analyze()` calls**, each with its own `var_labels = "Section Name", show_labels = "visible"`. This is almost always possible and produces a cleaner layout where:
-> - Each section's label is visible in the layout code, not buried inside a function body.
-> - Each `analyze()` call can independently select its own afun, `.var`, and `extra_args` via the normal Tier 1 parameter space search.
-> - The resulting table tree has proper `LabelRow` nodes addressable by path, rather than `DataRow` nodes containing `NULL` cells.
->
-> Reserve the stacking + interspersed label pattern for cases where the label rows are **data-driven** (e.g., labels derived from `.spl_context` or computed from cell values) or where the stacked blocks share state that cannot be passed between separate `analyze()` calls.
+> If a custom afun stacks existing afuns (Pattern 2B) with `rcell(NULL)` label rows between them, the row structure is likely encoded in the wrong place. Go back to `row_struct_layout.md` and determine whether the sections can be expressed as **separate `analyze()` calls**, each with `var_labels = "Section Name", show_labels = "visible"`. Reserve the stacking + interspersed label pattern for **data-driven** labels (derived from `.spl_context` or cell values) or when stacked blocks share state that cannot be passed between separate `analyze()` calls.
 
 ```r
 # Two sub-sections within one afun, with an interspersed label between them
@@ -696,8 +645,6 @@ mixed_section_afun <- function(df, .var, .N_col, ...) {
   c(part1, divider_label, part2)
 }
 ```
-
-This is distinct from `show_labels = "visible"` on `analyze()` (which adds a variable-label header row above all analysis rows) and from `summarize_row_groups()` (which adds a content row at a facet boundary). The afun-emitted label-only row is needed **only** when a section header must appear *within* a block of rows generated by a single `analyze()` call, not at the top.
 
 ### Building Block 7: Pre-Computed Derived Variables (Data Scope Invariant)
 
@@ -718,7 +665,7 @@ This means any variable that an inner function looks up via `.df_row` (as `a_fre
 
 Before using a custom `afun` or `cfun` in `build_table()`, verify:
 
-1. **Reuse Check**: Could this function be replaced by `make_afun()`, `c(rvs1, rvs2)`, `junco::get_ref_info()`, or an existing `junco` function from `[select_afuns.md](./select_afuns.md)`?
+1. **Reuse Check**: Re-evaluate Section 1 escalation ladder — could Tiers 0–4 satisfy this requirement?
 2. **Signature Union Rule Check**: Does the wrapper's `formals()` include every special argument that any inner function expects? Check via `names(formals(inner_fun))` against the special arguments reference in Section 5.2. Does the wrapper include any special argument that no inner function accepts? If so, remove it — forwarding it via `...` will cause "unused argument" errors. Pay special attention to confusingly similar names (`.alt_df` vs `.alt_df_full`, `.df_row` vs `df`).
 3. **Zero-Row / All-`NA` Safety**: What happens when `nrow(df) == 0` or `all(is.na(x))` in a sparse subgroup cell?
    - Does `in_rows()` still return the **exact same number of rows and row names** as a non-empty cell? (Never return a 0-row `in_rows()` with non-empty `.labels` or `.formats`, and never return fewer rows in an empty column than in populated columns).
@@ -727,10 +674,8 @@ Before using a custom `afun` or `cfun` in `build_table()`, verify:
    - Remember that the **left-most column** determines the stub labels (`value_labels()`), row formats, and `indent_mod()` for the entire row section.
 5. **Subject vs. Event Denominator Correctness**:
    - If `df` has multiple rows per subject (e.g., `ADAE`, `ADLB`, `ADCM`), are subject counts deduplicated via `length(unique(df[[id]]))` and is `.N_col` (with a subject-count `alt_counts_df`) or `.alt_df_full` used rather than `.N_row` or `nrow(df)`?
-6. **Dual `afun`/`cfun` Compatibility**:
-   - If the function is used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal parameter and assign `labelstr` to the returned row label?
-7. **No Precomputed Cell Values Via External State**:
-   - Does the function compute all cell values from its inputs (`df`/`x`, `.spl_context`, `.N_col`, etc.) rather than reading precomputed analysis results from the enclosing or global environment? Function factories capturing configuration parameters and environment caching per Building Block 3 are permitted; smuggling in precomputed data or results is not.
+6. **Dual `afun`/`cfun` Compatibility**: If used in `summarize_row_groups()`, does it accept `labelstr = NULL` as its second formal? (See Section 5.1 template.)
+7. **No Precomputed Cell Values Via External State**: All cell values computed from function inputs, not from enclosing/global scope? (Configuration capture and BB3 caching are permitted; precomputed data/results are not.)
 8. **Pre-Computed Derived Variables Check**:
    - Does the afun reference any variable (via `.var`, subsetting, or inner function calls) that doesn't exist in the dataset(s) passed to `build_table()`? If so, move the derivation to data prep. Variables created via `mutate()` inside the afun exist only in the `df` column-slice, not in `.df_row`, `.alt_df_full`, `.spl_context$full_parent_df`, or any other data.frame special argument (see Building Block 7). If the variable is needed in both `df` and `alt_counts_df` (e.g., for denominator calculations), it must be pre-computed in both datasets.
 9. **No Leading `rcell(NULL)` for Section Headers**:

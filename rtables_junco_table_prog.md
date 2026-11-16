@@ -10,11 +10,11 @@ This master skill orchestrates the complete translation of a desired table (typi
 > [!IMPORTANT]
 > **Modular Architecture — Defer to Specialist Sub-Skills**
 > Programming a table in `rtables` is governed by **four distinct layout responsibilities plus post-build introspection**, organized across **five specialist sub-skills**. Rather than improvising all aspects at once, always decompose the table and consult the corresponding specialist skill for each part:
-> 1. **Column Faceting Structure** $\longrightarrow$ Defer to **[col_struct_layout.md](./col_struct_layout.md)**
-> 2. **Row Faceting Structure** $\longrightarrow$ Defer to **[row_struct_layout.md](./row_struct_layout.md)**
-> 3. **Marginal Group Summary (`cfun`) & Leaf Analysis (`afun`) Selection** $\longrightarrow$ Defer to **[select_afuns.md](./select_afuns.md)** *(also referred to as `selecting_afuns.md`)*
-> 4. **Custom `afun` / `cfun` Extension & Construction (Escalation Only)** $\longrightarrow$ Defer to **[custom_afuns.md](./custom_afuns.md)** **only** when the selection process in [select_afuns.md](./select_afuns.md) confirms that no existing `junco` or `tern` function can satisfy the requirement via `extra_args` alone.
-> 5. **Post-Build Introspection, Sorting & Pruning** $\longrightarrow$ Defer to **[introspection_sort_prune.md](./introspection_sort_prune.md)** for all post-`build_table()` operations: navigating the table tree (row/column pathing, wildcards), extracting cell values, removing empty/low-count rows, or reordering rows by computed cell values (e.g., "sort by decreasing incidence").
+> 1. **Column Faceting Structure** → Defer to **[col_struct_layout.md](./col_struct_layout.md)**
+> 2. **Row Faceting Structure** → Defer to **[row_struct_layout.md](./row_struct_layout.md)**
+> 3. **Marginal Group Summary (`cfun`) & Leaf Analysis (`afun`) Selection** → Defer to **[select_afuns.md](./select_afuns.md)** *(also referred to as `selecting_afuns.md`)*
+> 4. **Custom `afun` / `cfun` Extension & Construction (Escalation Only)** → Defer to **[custom_afuns.md](./custom_afuns.md)** **only** when the selection process in [select_afuns.md](./select_afuns.md) confirms that no existing `junco` or `tern` function can satisfy the requirement via `extra_args` alone.
+> 5. **Post-Build Introspection, Sorting & Pruning** → Defer to **[introspection_sort_prune.md](./introspection_sort_prune.md)** for all post-`build_table()` operations: navigating the table tree (row/column pathing, wildcards), extracting cell values, removing empty/low-count rows, or reordering rows by computed cell values (e.g., "sort by decreasing incidence").
 >
 > Use **this orchestrator skill** to decompose the shell, coordinate the sub-tasks in order, enforce cross-dimension integration contracts (data preprocessing, `alt_counts_df`, `ref_path`, `denom_by`, `multivars`, and top-left labels), and assemble the final `build_table()` pipeline.
 
@@ -97,7 +97,7 @@ Before writing layout code, inspect the shell and answer four questions:
 
 ---
 
-### Stage 2: Design & Verify Column Structure $\longrightarrow$ Defer to [`col_struct_layout.md`](./col_struct_layout.md)
+### Stage 2: Design & Verify Column Structure → Defer to [`col_struct_layout.md`](./col_struct_layout.md)
 
 Consult **[col_struct_layout.md](./col_struct_layout.md)** to implement the column header layout:
 
@@ -118,7 +118,7 @@ Consult **[col_struct_layout.md](./col_struct_layout.md)** to implement the colu
 
 ---
 
-### Stage 3: Design & Prototype Row Faceting Structure $\longrightarrow$ Defer to [`row_struct_layout.md`](./row_struct_layout.md)
+### Stage 3: Design & Prototype Row Faceting Structure → Defer to [`row_struct_layout.md`](./row_struct_layout.md)
 
 Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row hierarchy skeleton:
 
@@ -140,17 +140,17 @@ Consult **[row_struct_layout.md](./row_struct_layout.md)** to construct the row 
 
 ---
 
-### Stage 4: Evaluate & Select `cfun` and `afun` Functions $\longrightarrow$ Defer to [`select_afuns.md`](./select_afuns.md) (with Escalation to [`custom_afuns.md`](./custom_afuns.md))
+### Stage 4: Evaluate & Select `cfun` and `afun` Functions → Defer to [`select_afuns.md`](./select_afuns.md) (with Escalation to [`custom_afuns.md`](./custom_afuns.md))
 
 Consult **[select_afuns.md](./select_afuns.md)** (also referred to as `selecting_afuns.md`) to replace every dummy `cfun` and `afun` with an existing production function and `extra_args`:
 
-1. **Answer the Three Fundamental Questions** (detailed in [select_afuns.md](./select_afuns.md) Section 2) for every `summarize_row_groups()` and `analyze()` call: **(a)** Unit of counting/analysis, **(b)** Denominator & target (sub)population, **(c)** Column/row/dual conditionality. Use the Decision Matrix ([select_afuns.md](./select_afuns.md) Section 3) to select the function, then consult the Expert Skill Routing Table ([select_afuns.md](./select_afuns.md) Section 3.1) for wiring details.
+1. **Answer the Three Fundamental Questions** (detailed in [select_afuns.md](./select_afuns.md) Section 2) for every `summarize_row_groups()` and `analyze()` call: **(a)** Unit of counting/analysis, **(b)** Denominator & target (sub)population, **(c)** Column/row/dual conditionality. Use the Decision Matrix ([select_afuns.md](./select_afuns.md) Section 3) to select the function, then consult the Expert Skill Index ([select_afuns.md](./select_afuns.md) Section 3.1) for wiring details.
    - **Key constraint**: When the required output is a single-row unique-subject count (e.g., "Subjects with ≥1 AE"), use `a_freq_j` with a **binary flag variable** as `.var` and `val = "Y"` in `extra_args`. Never pass `USUBJID` as the analyzed variable — `a_freq_j` will enumerate every subject ID as a separate row.
    - **Always explicitly record the conditionality assessment**, even when the answer is "none," to ensure auditability.
 2. **Configure Specific Requirements**: Statistical test/CI method, dynamic decimal precision (`formats_var`, `.formats = "default"`, `format_sigfig_j`).
 3. **Verify Record Granularity Before Relying on Row Counts as Subject Counts**:
    When a `summarize_row_groups()` or `analyze()` call uses a row-counting mechanism as a proxy for unique-subject counts, **verify that the dataset has exactly one row per subject within each `(row_facet, col_facet)` cell**. If not, use a subject-deduplicating function instead (e.g., `a_freq_j` with `.stats = "count_unique"`). Never assume record granularity — confirm empirically.
-4. **Escalation When No Suitable Existing `afun` / `cfun` Is Found $\longrightarrow$ Defer to [`custom_afuns.md`](./custom_afuns.md)**:
+4. **Escalation When No Suitable Existing `afun` / `cfun` Is Found → Defer to [`custom_afuns.md`](./custom_afuns.md)**:
    - Escalate **only** when [select_afuns.md](./select_afuns.md) confirms no existing function can produce the required rows/cells via `extra_args`. Treat Tier 1 as a **parameter space search** (`.var`, `.stats`, `extra_args`, data-prep dimensions) — the most common premature-escalation pattern is: one parameterization fails → function declared inadequate → bespoke Tier 5 written. Record the Tier 1 search log before proceeding.
    - **Tier 2**: `make_afun()` wrapper to lock in `.stats`/`.formats`/`.labels`/defaults.
    - **Tier 3**: Thin wrapper combining existing `afun` outputs via `c(rvs1, rvs2)`, `.spl_context` dispatch, or `indent_mod()` adjustment.
@@ -189,7 +189,7 @@ Before executing `build_table()`, verify all **Seven Cross-Dimension Integration
 
 ---
 
-### Stage 6: Post-Build Introspection, Sorting & Pruning $\longrightarrow$ Defer to [`introspection_sort_prune.md`](./introspection_sort_prune.md)
+### Stage 6: Post-Build Introspection, Sorting & Pruning → Defer to [`introspection_sort_prune.md`](./introspection_sort_prune.md)
 
 After `build_table()` returns, **all operations on the built `TableTree` object** — navigating its structure, extracting values, removing rows, and reordering rows — are covered by **[introspection_sort_prune.md](./introspection_sort_prune.md)**. Defer to that skill for:
 
@@ -258,8 +258,8 @@ When columns represent multiple variables or statistics rather than pure subpopu
 | **Stats-in-Columns Layout**<br>(`Visit Values [N, Mean, SD, SE, Med, Min, Max]`, `Base Mean (SD)`, `CFB [...]`) | `split_cols_by_multivar(c("AVAL", "BASE", "CHG"), varlabels = ...) \|> split_cols_by("STUDYID", split_fun = make_split_fun(post = list(stats_in_cols_setup())))` | `split_rows_by("PARAM", split_fun = drop_split_levels) \|> split_rows_by("ARMCD", labels_var = "ARM")` | `analyze("AVISIT", afun = column_stats, extra_args = list(exclude_visits = c("BASELINE", "SCREENING"), .formats = "default", formats_var = "fmt_d"))` |
 
 ### Contract 5: Top-Left Corner Hierarchy Alignment (`label_pos = "topleft"` + `append_topleft()`)
-- Each `split_rows_by(..., split_label = "...", label_pos = "topleft")` adds one line to the top-left corner area, automatically indented by $2 \times (\text{nesting depth} - 1)$ spaces.
-- Because `analyze()` does not support `label_pos = "topleft"`, if the shell shows a label for the leaf analysis level in the top-left corner (e.g., `"  Preferred Term, n (%)"` under `"System Organ Class"`), add it explicitly via `append_topleft("  Preferred Term, n (%)")` with $2 \times (\text{number of parent topleft splits})$ leading spaces.
+- Each `split_rows_by(..., split_label = "...", label_pos = "topleft")` adds one line to the top-left corner area, automatically indented by 2 × (nesting depth - 1) spaces.
+- Because `analyze()` does not support `label_pos = "topleft"`, if the shell shows a label for the leaf analysis level in the top-left corner (e.g., `"  Preferred Term, n (%)"` under `"System Organ Class"`), add it explicitly via `append_topleft("  Preferred Term, n (%)")` with 2 × (number of parent topleft splits) leading spaces.
 
 ### Contract 6: No Data Duplication (Row-Count Preservation Invariant)
 - The datasets passed to `build_table(lyt, df, alt_counts_df = ...)` must have the **same number of rows** as the source datasets after filtering and joining. Specifically:
@@ -307,7 +307,7 @@ cl A.1                       78 (58.2%)      89 (67.4%)     75 (56.0%)       2.2
 2. **Stage 2 ([`col_struct_layout.md`](./col_struct_layout.md))**: Spanning header `"Active Study Agent"` over active arms, `" "` over `"B: Placebo"`, plus non-nested `"Risk Difference (%) (95% CI)"` branch. Constructed via `create_colspan_var()`, `create_colspan_map()`, and `grouped_cols_w_diffs()` (or manual `split_cols_by`). Reference path is `ref_path <- c("colspan_trt", " ", "ARM", "B: Placebo")`.
 3. **Stage 3 ([`row_struct_layout.md`](./row_struct_layout.md))**:
    - Section 1: Unfaceted root `analyze("TRTEMFL")`.
-   - Section 2: `split_rows_by("AEBODSYS", split_fun = trim_levels_in_group("AEDECOD"), label_pos = "topleft", section_div = " ", nested = FALSE)` $\to$ `summarize_row_groups("AEBODSYS")` $\to$ `analyze("AEDECOD")` $\to$ `append_topleft("  Preferred Term, n (%)")`.
+   - Section 2: `split_rows_by("AEBODSYS", split_fun = trim_levels_in_group("AEDECOD"), label_pos = "topleft", section_div = " ", nested = FALSE)` → `summarize_row_groups("AEBODSYS")` → `analyze("AEDECOD")` → `append_topleft("  Preferred Term, n (%)")`.
 4. **Stage 4 ([`select_afuns.md`](./select_afuns.md))**:
    - Both `cfun` and `afun` use `junco::a_freq_j` with `denom = "n_altdf"`, `riskdiff = TRUE`, `ref_path = ref_path`, `method = "wald"`, `.stats = "count_unique_fraction"`.
    - Root `TRTEMFL` analysis adds `val = "Y", label = "Number of subjects with AE"`.
@@ -409,7 +409,7 @@ Asian
 1. **Stage 2 ([`col_struct_layout.md`](./col_struct_layout.md))**: Nested 2-level column split `split_cols_by("STRATA1", split_fun = keep_split_levels(c("A", "B"))) |> split_cols_by("ARM", split_fun = keep_split_levels(c("A: Drug X", "B: Placebo")), show_colcounts = TRUE)`.
 2. **Stage 3 ([`row_struct_layout.md`](./row_struct_layout.md))**:
    - Section 1: Unfaceted root `analyze("BMEASIFL", var_labels = "All Patients", show_labels = "visible")`.
-   - Section 2: `split_rows_by("RACE", label_pos = "topleft")` (no `summarize_row_groups`, so `"Asian"` is a pure label row) $\to$ `split_rows_by("SEX", split_fun = keep_split_levels(c("Male", "Female")), label_pos = "topleft")` $\to$ `summarize_row_groups()` (gives `"Male   xx"` marginal count row) $\to$ `analyze("BMEASIFL")`.
+   - Section 2: `split_rows_by("RACE", label_pos = "topleft")` (no `summarize_row_groups`, so `"Asian"` is a pure label row) → `split_rows_by("SEX", split_fun = keep_split_levels(c("Male", "Female")), label_pos = "topleft")` → `summarize_row_groups()` (gives `"Male   xx"` marginal count row) → `analyze("BMEASIFL")`.
 3. **Stage 4 ([`select_afuns.md`](./select_afuns.md))**:
    - `summarize_row_groups(format = "xx")` (or `cfun = a_freq_j` with `.stats = "n_df"`).
    - `analyze("BMEASIFL", afun = a_freq_j, extra_args = list(.stats = "count_unique_fraction", denom = "N_col"))` (or `afun = counts_wpcts`).
