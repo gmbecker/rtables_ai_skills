@@ -85,6 +85,7 @@ Before writing layout code, inspect the shell and answer four questions:
 2. **What is the Column Header Topology?**
    - Classify the topology: asymmetric hierarchy (parent-dependent children), symmetric hierarchy (uniform children), sibling non-nested branches, multi-variable sub-columns, or cross-tabulation.
    - Identify spanning headers, leaf-level grouping variables, virtual combination levels (e.g., `"All Active"`), and non-nested comparison branches (e.g., `"Risk Difference (%) (95% CI)"`).
+   - **Semantic coherence check**: For every spanning header identified, verify that all leaf columns you are placing under it genuinely belong to the concept it names. If a column does not belong (e.g., `"Placebo"` under `"Active Treatment"`), it is under a **blank spanning label** at the same depth, not under the visible span. See [col_struct_layout.md](./col_struct_layout.md) Section 2.3 (Mandatory Semantic Coherence Validation Gate).
    - The grouping variable need not be a treatment arm — it can be any categorical subject classification (ADA status, biomarker category, exposure quartile, geographic region). The topology classification is the same regardless of what the variable represents.
 3. **What is the Row Faceting Hierarchy?**
    - Identify top-level sections, nested row groups (e.g., `AEBODSYS -> AEDECOD`, `RACE -> SEX`, `PARAM -> AVISIT`), which group headers carry marginal summary values (`summarize_row_groups`) vs. pure labels, and where labels sit (`label_pos = "topleft"`, `"visible"`, or `"hidden"`).

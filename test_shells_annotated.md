@@ -26,7 +26,7 @@ This document describes the rationale behind each test shell in `test_shells_bar
 | T13   | Stats-in-cols | Param→Arm→Visit | column_stats | — | — | stats_in_cols_setup; exclude_visits; formats_var; Contract 4 |
 | T14   | Combo arms | Visit facets | a_summarize_ancova_j | — | — | add_combo_levels; method_combo = "contrasts"; ref_path blanking |
 | T15   | Period cols | SOC→PT | a_freq_combos_j | — | — | combosdf; filter_var/flag_var; do_not_filter; double-counting prevention |
-| T16   | Non-trt grouped_cols_w_diffs + asymmetric inner | Visit facets | tern::a_summary + a_diff_means | Tier 3 dispatch | — | junco on non-ARM var; blank span; asymmetric titer sub-cols |
+| T16   | 3 parallel non-nested branches (blank span + restricted `keep_split_levels` + diff `add_overall_col`) | Visit facets | tern::a_summary + s_diff_means | Tier 3 dispatch | — | Non-ARM var; `labels_var` relabel; `keep_split_levels` restricted split; asymmetric titer sub-cols; `s_diff_means` via `.df_row` partition (a_freq_j pattern) |
 | T17   | Non-trt split + Total | Param×Visit | tern::a_summary | — | — | junco over-engineering trap; Total inside span; non-ARM column var |
 | T18   | Blank span detection | SOC→PT | a_freq_j | — | — | Whitespace spanning label; ref_path with " "; create_colspan_var |
 | T19   | Total UNDER span | SOC→PT | a_freq_j | — | — | Centering disambiguation; add_overall_level vs add_overall_col |
@@ -488,9 +488,10 @@ The following reasoning paths are exercised by the proposed test shells but were
 | stats_in_cols_setup + column_stats | T13 |
 | add_combo_levels + ANCOVA contrasts | T14 |
 | a_freq_combos_j cumulative period columns | T15 |
-| junco column functions on non-treatment-arm variables | T16, T17 |
+| Non-treatment-arm column variable with restricted split + `labels_var` relabeling | T16 |
 | Blank/whitespace spanning label detection | T16, T18 |
-| Asymmetric inner columns (titer buckets under one parent only) | T16 |
+| Asymmetric inner columns (titer buckets under Positive only via `keep_split_levels`) | T16 |
+| Manual diff via `s_diff_means` (ref_path fails across non-nested branches) | T16 |
 | Total column placement disambiguation (under vs outside span) | T19, T20 |
 
 ### Known Weakness Categories Targeted
@@ -511,33 +512,40 @@ The following reasoning paths are exercised by the proposed test shells but were
 ## Shell T16: Immunogenicity by ADA Status and Peak Titer with Pairwise Differences
 
 ### Structural Notes (from shell spec)
-- Column structure uses ADA_STATUS as the primary grouping variable (NOT a treatment arm). "Negative" is the reference group; "Positive" is under the "Peak Titers..." spanning label with titer bucket sub-columns; a non-nested "Difference" sibling branch compares Positive vs Negative.
-- The titer bucket columns (<10, 10 to <100, >=100) exist only under the "Positive" level, not under "Negative" (asymmetric inner structure).
+- Column structure uses ADA_STATUS as the primary grouping variable (NOT a treatment arm). Three parallel non-nested branches:
+  1. Blank span `" "` over `ADA_STATUS` split → Negative, Positive leaf columns.
+  2. A second `ADA_STATUS` split (`nested = FALSE`) restricted to Positive via `keep_split_levels("Positive")`, relabeled to "Peak Titers for Subjects Positive for Treatment-emergent Antibodies" via `labels_var`, with `child_labels = "hidden"` → nested `TITER_BUCKET` split (<10, 10 to <100, >=100).
+  3. `add_overall_col("Difference (95% CI)...")` → `DIFF_LABEL` split (Positive vs Negative).
+- The titer bucket columns exist only under the Positive level (asymmetric inner structure). Branch 2 models this semantically: it is a restricted facet of ADA_STATUS, not an unrelated overall column.
 - Row structure: Visit facets with continuous summary statistics (N, Mean/SD, Median).
 
 ### Reasoning Paths Exercised
 
-**Column Structure — junco Functions on Non-Treatment Variables**:
-- This is the primary target. The column topology is `grouped_cols_w_diffs` + `grouped_cols_w_subgrps` (or `trim_levels_in_group`), but the outer grouping variable is `ADA_STATUS` (Negative / Positive), NOT a treatment arm. The titer buckets (<10, 10 to <100, >=100) are sub-columns under the "Positive" level.
-- Tests whether the model recognizes that `create_colspan_var`, `create_colspan_map`, and `grouped_cols_w_diffs` operate on **arbitrary factor variables** despite their argument names (`trt_var`, `colspan_trt_map`). The orchestrator explicitly notes this: "A `grouped_cols_w_subgrps(trtvar = "ADA_STATUS", subgrp_var = "TITER_BUCKET")` call is perfectly valid."
-- The column structure is a hybrid: the outer level is a `grouped_cols_w_diffs` topology (Negative vs Positive with a Difference branch), while the inner level under "Positive" is an asymmetric hierarchy (titer buckets exist only under Positive, not under Negative). This requires either `trim_levels_in_group("TITER_BUCKET")` on the ADA_STATUS split, or a `trim_levels_to_map(map)` approach.
+**Column Structure — Restricted Split with labels_var Relabeling**:
+- This is the primary target. The column topology has three parallel non-nested branches built with `add_overall_col(" ")`, a second `split_cols_by("ADA_STATUS", nested = FALSE, ...)`, and `add_overall_col("Difference...")`. No `grouped_cols_w_diffs`, `create_colspan_var`, or `create_colspan_map` is used.
+- Branch 2 uses `keep_split_levels("Positive")` to restrict the second ADA_STATUS split to Positive only, and `labels_var = "ADA_SPAN_LBL"` to relabel the Positive spanning header to "Peak Titers for Subjects Positive for Treatment-emergent Antibodies". The `child_labels = "hidden"` argument suppresses the redundant "Positive" label beneath the span.
+- The `ADA_SPAN_LBL` variable maps each ADA_STATUS level to its display label: Positive → the "Peak Titers..." text, Negative → "Negative" (though only Positive is used in Branch 2).
+- Tests whether the model recognizes that the titer buckets are semantically sub-columns of the Positive ADA status level and models this with a restricted split rather than an `add_overall_col` shortcut (which would only work by accident when TITER_BUCKET is NA for Negative subjects).
 
 **Blank Spanning Label Detection**:
-- "Negative" sits under a blank spanning label at the same tier as "Peak Titers for Subjects Positive for Treatment-emergent Antibodies". This is the same `non_active_grp_span_lbl = " "` pattern as in standard AE tables, but applied to ADA status.
-- Tests whether the model correctly identifies the blank span and wires `ref_path = c("colspan_trt", " ", "ADA_STATUS", "Negative")`.
+- Branch 1 uses `add_overall_col(" ")` to create a blank spanning header over the full ADA_STATUS split (Negative, Positive). This blank span sits at the same tier as "Peak Titers..." (Branch 2) and "Difference (95% CI)..." (Branch 3).
+- Tests whether the model correctly identifies the blank span from the shell's visual layout where Negative and Positive have no text above them at the tier where the other branches have spanning labels.
 
 **Select Afuns — Mixed Column Behavior**:
-- Main columns show continuous summaries (tern::a_summary); the Difference column shows mean difference + CI (a_diff_means or a custom wrapper).
-- This is column-conditional behavior where the main columns use a column-agnostic afun and the difference column uses a comparative afun. Tests whether the model recognizes this as a Tier 3 column-dispatch pattern (custom_afuns.md Pattern 2A) or whether it can use a_diff_means with ref_path directly.
+- Main columns (Branches 1 and 2) show continuous summaries via `tern::a_summary(.stats = c("n", "mean_sd", "median"))`; the Difference column (Branch 3) shows mean difference + 95% CI computed manually from `.df_row` via Welch t-test.
+- `a_diff_means` cannot be used directly because its `get_ref_info` call requires the reference column's split names to match the current column's `cur_col_split_path` (`in_column` checks fixed-position identity). The Difference branch has split names (`"Difference..."`, `"DIFF_LABEL"`) that don't match Branch 1's (`" "`, `"ADA_STATUS"`), so `get_ref_info` early-exits with NULL.
+- The custom afun should instead call `s_diff_means` (the workhorse behind `a_diff_means`) directly, manually partitioning `.df_row` by ADA_STATUS to obtain the two group data frames. This follows the same pattern as `a_freq_j`, which bypasses `get_ref_info` entirely — extracting `trt_var`/`ctrl_grp` from `ref_path` directly and passing them to `s_risk_diff_val_j`.
+- This is a Tier 3 column-dispatch pattern (custom_afuns.md Pattern 2A): the afun inspects `.spl_context$cur_col_split_val` to detect the Difference branch and dispatches accordingly.
 
 **Orchestrator Stage 2 — Non-Standard Variable Naming**:
 - The model must map the shell's semantic labels ("Negative for Treatment-emergent Antibodies", "Positive for Treatment-emergent Antibodies") to data variable names (ADA_STATUS, TITER_BUCKET) that don't follow the standard ARM/TRT01A naming convention.
 
 ### Hypothesized Weaknesses Probed
-- **Treatment-arm fixation**: Refusing to use `grouped_cols_w_diffs` because the grouping variable isn't a treatment arm, and instead attempting to build the column structure manually with chained `split_cols_by` calls.
+- **add_overall_col shortcut**: Using `add_overall_col("Peak Titers...")` followed by `split_cols_by("TITER_BUCKET")` for Branch 2 instead of a restricted ADA_STATUS split. This produces correct output only when TITER_BUCKET is NA for Negative subjects — it doesn't model the semantic truth that titer buckets are sub-columns of the Positive level.
 - **Asymmetric inner columns**: Not recognizing that titer buckets only exist under "Positive" and trying to create them under "Negative" too (producing empty N=0 columns).
-- **Difference column afun**: Using `tern::a_summary` in the difference column (which doesn't compute between-group differences) instead of `a_diff_means` or a column-dispatch wrapper.
-- **ref_path through non-standard variable**: Getting the ref_path wrong because the variable is ADA_STATUS instead of ARM/TRT01A.
+- **Difference column afun**: Using `tern::a_summary` in the difference column (which doesn't compute between-group differences), or calling `a_diff_means` directly (which fails because `get_ref_info`'s `in_column` requires split name identity at fixed positions across branches). The correct approach calls `s_diff_means` directly with manually partitioned `.df_row` groups — following the same pattern as `a_freq_j`, which bypasses `get_ref_info` and calls `s_risk_diff_val_j` directly. Reimplementing inference via bare `t.test` instead of `s_diff_means` is also wrong — always prefer the existing junco/tern workhorse function.
+- **labels_var for spanning relabel**: Not knowing how to relabel a split level's spanning header; attempting `split_label` (which labels the split node, not the facet) or hardcoding level names in the factor.
+- **make_afun .stats trap**: Using `make_afun(tern::a_summary, .stats = c("n", "mean_sd", "median"))` expecting it to filter stats — it doesn't; `.stats` must be passed directly to `tern::a_summary` as an argument.
 
 ---
 
@@ -664,7 +672,7 @@ The following reasoning paths are exercised by the proposed test shells but were
 
 | Shell | Col Struct | Row Struct | Select Afuns | Custom Afuns | Sort/Prune | Key Reasoning Traps |
 |-------|-----------|-----------|-------------|-------------|-----------|-------------------|
-| T16   | Non-trt grouped_cols_w_diffs + asymmetric inner | Visit facets | tern::a_summary + a_diff_means | Tier 3 dispatch | — | junco on non-ARM var; blank span; asymmetric titer sub-cols; ref_path through non-standard var |
+| T16   | 3 parallel non-nested branches (blank span + restricted `keep_split_levels` + diff `add_overall_col`) | Visit facets | tern::a_summary + s_diff_means | Tier 3 dispatch | — | Non-ARM var; `labels_var` relabel; `keep_split_levels` restricted split; asymmetric titer sub-cols; `s_diff_means` via `.df_row` partition (a_freq_j pattern) |
 | T17   | Non-trt split + Total | Param×Visit | tern::a_summary | — | — | junco over-engineering trap; Total inside span; non-ARM column variable |
 | T18   | Blank span detection | SOC→PT | a_freq_j | — | — | Whitespace spanning label; ref_path with " "; create_colspan_var mechanics |
 | T19   | Total UNDER span | SOC→PT | a_freq_j | — | — | Centering-based disambiguation; add_overall_level vs add_overall_col |
@@ -674,9 +682,9 @@ The following reasoning paths are exercised by the proposed test shells but were
 
 | Gap | Covered By |
 |-----|-----------|
-| junco column functions on non-treatment-arm variables (with difference columns) | T16 |
+| Non-treatment-arm column variable with restricted split + `labels_var` relabeling (with difference columns) | T16 |
 | junco column functions on non-treatment-arm variables (without difference columns) | T17 |
-| Asymmetric inner columns under only one level of outer split | T16 |
+| Asymmetric inner columns under Positive only via `keep_split_levels` restricted split | T16 |
 | Blank/whitespace spanning label detection and implementation | T16, T18 |
 | ref_path construction through blank spanning label | T18 |
 | Total column under spanning label (add_overall_level) | T19 |
@@ -1346,3 +1354,328 @@ These shells target the following categories of reasoning failure:
 4. **Data Prep Completeness** (T23, T26, T29, T32): The shell requires derived variables that must exist in data prep, not inside afuns (`WORST_ANRIND` across all post-baseline visits in `T29`; subject-level `MAX_SEV` to work around `a_maxlev`'s RD limitation in `T32`). The model must trace the data flow through filtering, joining, and factor level synchronization.
 
 5. **Over-Correction from Warnings & Asymmetric Trees** (T27, T31): The model must distinguish when defaults or warnings invert (`drop_split_levels` on ragged inner splits in `T27`; `make_split_fun` + `restrict_facets` instead of `drop_split_levels` to prune `CFB` under `Baseline` in `split_cols_by_multivar` in `T31`).
+
+---
+
+## Adversarial Shells (T33–T38): Non-Treatment-Arm Grouping Variables
+
+These shells test whether the model recognizes that `grouped_cols_w_diffs` and `grouped_cols_w_subgrps` operate on **arbitrary factor variables** — not just treatment arms. The argument names (`trt_var`, `non_active_grp`, etc.) are misleading by design. At least one shell in each set (D-series and S-series) uses a non-pharma domain to test generalization beyond clinical trials.
+
+---
+
+## Shell T33: Laboratory Values by Country with Difference vs CHN
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_diffs` with COUNTRY as the grouping variable (not a treatment arm).
+- Reference group: CHN. Non-active (reference) span is blank (" ") over CHN. Active span is "Other Countries" over USA, JPN.
+- Difference columns ("Difference (95% CI)\nvs CHN") show mean difference and 95% CI for each non-reference country vs CHN.
+- Difference columns are blank for n and Median rows (only Mean (SD) row has diff values).
+- Row structure: PARAMCD → AVISIT → continuous summary (n, Mean (SD), Median).
+- Data source: `formatters::ex_adlb` and `formatters::ex_adsl` (not `pharmaverseadamjnj`), filtered to COUNTRY %in% c("CHN", "USA", "JPN").
+
+### Reasoning Paths Exercised
+
+**Column Structure — `grouped_cols_w_diffs` on Non-Treatment Variable (col_struct_layout.md Section 8.1)**:
+- The shell's column topology is identical to T16's `grouped_cols_w_diffs` pattern, but the grouping variable is COUNTRY instead of ADA_STATUS or ARM. The model must recognize that `trt_var` in `create_colspan_var` / `create_colspan_map` / `grouped_cols_w_diffs` accepts any factor variable, not just treatment arms.
+- The blank reference span (" ") over CHN and the named active span "Other Countries" over USA/JPN test the same blank-span-grouping pattern as T16 and T18.
+
+**Blank Span Detection (col_struct_layout.md Section 8.1, shell_column_extraction_prompt.md)**:
+- CHN has no visible spanning header above it (the blank " " span is invisible in the rendered shell). The model must infer the blank span from the column topology: CHN is visually separated from USA/JPN, which are grouped under "Other Countries".
+- This is the same blank-span detection tested in T16 and T18, but with country names instead of treatment arms.
+
+**Conditional Diff-Column Blanking (custom_afuns.md)**:
+- The diff columns must be blank for n and Median rows but populated for Mean (SD). This requires a conditional afun that checks whether the current column is a diff column (via `.spl_context$cur_col_split_val[[1]][1] == diffs_label`) and emits `rcell(NULL)` for non-applicable rows.
+- This is the same conditionality pattern as T05 and T16, but applied to a country-based grouping.
+
+**Data Source Awareness**:
+- The programming notes specify `formatters::ex_adlb` and `formatters::ex_adsl`, not `pharmaverseadamjnj`. The model must use the correct data source. `pharmaverseadamjnj::adsl` has only COUNTRY = "USA" (single level), which would make the shell impossible.
+- `propose_column_widths()` is needed because the spanning headers ("Other Countries", "Difference (95% CI)\nvs CHN") are wider than the body content, causing cell truncation at default widths.
+
+### Hypothesized Weaknesses Probed
+- **Treatment-arm assumption**: Passing `ARM` or `TRT01A` to `trt_var` instead of `COUNTRY`, because the model assumes column grouping must be by treatment arm.
+- **Wrong data source**: Using `pharmaverseadamjnj::adsl` (which has only COUNTRY = "USA") instead of `formatters::ex_adsl`.
+- **Missing blank-for-n-and-Median logic**: Populating all diff-column cells with "xx.x (xx.x - xx.x)" instead of blanking n and Median rows.
+- **Column truncation**: Not using `propose_column_widths()`, causing the rendered table to truncate cell values.
+
+---
+
+## Shell T34: AE Incidence by Stratification Factor with Difference
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_diffs` with STRATA1 as the grouping variable.
+- Reference group: A. Non-active (reference) span is blank (" ") over A. Active span is "Other Strata" over B, C.
+- Difference columns show incidence difference (%) and 95% CI for each non-reference stratum vs A.
+- Row structure: overall count → SOC (AEBODSYS) → PT (AEDECOD), using split_rows_by + summarize_row_groups at each level.
+- All rows (including overall, SOC, and PT) have diff-column values — no blanking needed.
+
+### Reasoning Paths Exercised
+
+**Column Structure — `grouped_cols_w_diffs` on Stratification Factor**:
+- Same `grouped_cols_w_diffs` pattern as T33, but with STRATA1 instead of COUNTRY. The model must again recognize that `trt_var` accepts any factor variable.
+- Unlike T33, all rows have diff-column values (count-percent in treatment columns, incidence difference in diff columns). No conditional blanking needed.
+
+**Row Structure — SOC→PT with `summarize_row_groups` and Diff Columns**:
+- The SOC and PT levels use `summarize_row_groups` (cfun) rather than `analyze` (afun). The cfun must also handle the diff-column conditionality (emitting incidence difference format strings in diff columns, count-percent in treatment columns).
+- This tests whether the model correctly wires both an afun (for the overall "Subjects with >=1 TEAE" row) and a cfun (for SOC and PT summary rows) with the same diff-column detection logic.
+
+**Contrast with T33**:
+- T33 has conditional blanking (n and Median blank in diff columns); T34 does not. This tests whether the model correctly assesses conditionality per shell rather than applying a blanket rule.
+
+### Hypothesized Weaknesses Probed
+- **Treatment-arm assumption**: Using ARM instead of STRATA1.
+- **Applying T33's blanking logic**: Incorrectly blanking some rows in diff columns because the model carries over the conditional blanking pattern from T33.
+- **cfun vs afun confusion**: Using only an afun for all rows (which would fail for SOC/PT summary rows) or only a cfun (which would fail for the overall analyze row).
+
+---
+
+## Shell T35: Product Defect Rates by Factory with Difference
+
+### Structural Notes (from shell spec)
+- Non-pharma domain: manufacturing quality control.
+- Column structure uses `grouped_cols_w_diffs` with FACTORY as the grouping variable.
+- Reference group: Factory A. Active span: "Comparison Factories" over Factory B, Factory C.
+- Row structure: overall count ("Items with >=1 defect") → defect type (Cosmetic, Structural, Electrical) via split_rows_by + summarize_row_groups.
+- Synthetic dataset: defect event dataset (one row per item-defect) with alt_counts_df = item-level inspection dataset (one row per item).
+
+### Reasoning Paths Exercised
+
+**Domain Generalization — Non-Pharma `grouped_cols_w_diffs`**:
+- This is the first non-pharma shell using `grouped_cols_w_diffs`. The model must recognize that the column structure pattern is domain-agnostic: FACTORY plays the same structural role as ARM/COUNTRY/STRATA1.
+- The terminology is entirely non-clinical: "Items with >=1 defect" instead of "Subjects with >=1 TEAE", "Rate Difference" instead of "Incidence Difference", "Factory" instead of "Treatment Arm".
+
+**alt_counts_df Semantics in Non-Pharma Context**:
+- The defect event dataset has one row per item-defect (an item can have multiple defect types). The item-level inspection dataset has one row per item. The model must recognize that `alt_counts_df` provides the denominator (total items inspected per factory), just as ADSL provides subject-level denominators in clinical tables.
+- This tests whether the model understands the structural role of `alt_counts_df` rather than just memorizing "ADSL goes in alt_counts_df".
+
+**Structural Similarity to T34**:
+- T35 has the same column topology and row pattern as T34 (overall count + category breakdown with diff columns), but in a completely different domain. This tests whether the model can transfer the pattern.
+
+### Hypothesized Weaknesses Probed
+- **Clinical vocabulary dependency**: Failing to map "Factory" → `trt_var`, "Items" → subjects, "defect type" → SOC because the model's pattern matching is anchored to clinical terminology.
+- **alt_counts_df confusion**: Not providing `alt_counts_df` because the model doesn't recognize the need for a denominator dataset outside the clinical context.
+- **Data fabrication**: The model must create a synthetic dataset since no package provides manufacturing QC data. Failure to create both the event-level and item-level datasets (or creating only one) would break the table.
+
+---
+
+## Shell T36: Vital Signs by Stratum Subdivided by Sex
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_subgrps` with STRATA1 as the outer grouping variable and SEX as the inner subgroup.
+- Total column ("Total") includes both sexes within each stratum. Placed first (before F, M) under each stratum.
+- Row structure: single analyze call producing continuous summary (n, Mean (SD), Median).
+- No difference or comparison columns.
+
+### Reasoning Paths Exercised
+
+**Column Structure — `grouped_cols_w_subgrps` on Non-Treatment Variable (col_struct_layout.md Section 8.2)**:
+- The model must recognize that `trtvar` in `grouped_cols_w_subgrps` accepts any factor variable. Here STRATA1 is the outer grouping variable, not a treatment arm.
+- The "SEX" label appears as a spanning header under each stratum level, with "Total", "F", "M" as leaf columns. This is the standard `grouped_cols_w_subgrps` topology with `total_facet = TRUE`.
+
+**Contrast with T11**:
+- T11 uses `grouped_cols_w_subgrps` with ARM as the outer variable and SEX as the inner subgroup. T36 replaces ARM with STRATA1. The model must not hardcode ARM as the outer variable.
+
+**Simple Row Structure**:
+- The row structure is deliberately simple (single analyze call, no splits) to isolate the column structure challenge. If the model gets the column structure right, the row structure should be trivial.
+
+### Hypothesized Weaknesses Probed
+- **Treatment-arm assumption**: Using ARM instead of STRATA1 as `trtvar`.
+- **Over-engineering**: Adding difference columns or comparison logic that doesn't exist in the shell.
+- **Total placement**: Using `add_overall_col("Total")` (outside the subgroup split) instead of `total_facet = TRUE` (inside each stratum).
+
+---
+
+## Shell T37: AE Incidence by Stratum and Sex
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_subgrps` with STRATA1 as outer, SEX as inner, "Both Sexes" as within-stratum total.
+- Row structure: overall count (analyze) → SOC (split_rows_by AEBODSYS + summarize_row_groups). No PT level.
+- All rows use count-percent format. No difference columns.
+
+### Reasoning Paths Exercised
+
+**Column Structure — `grouped_cols_w_subgrps` with Custom Total Label**:
+- Same topology as T36, but with `total_lbl = "Both Sexes"` instead of `total_lbl = "Total"`. Tests whether the model correctly passes the custom total label.
+
+**Row Structure — SOC-Only Hierarchy (No PT)**:
+- The shell shows SOC rows but no PT rows underneath. The model must recognize that the hierarchy stops at SOC and not add a PT split.
+- This contrasts with T34 (which has SOC→PT) and tests whether the model reads the shell's actual depth rather than assuming all AE tables have SOC→PT.
+
+**afun + cfun Wiring Without Diff Columns**:
+- The overall "Subjects with >=1 TEAE" row uses an afun; the SOC rows use a cfun via `summarize_row_groups`. Both emit count-percent values with no conditionality (no diff columns to check).
+- This is simpler than T34's wiring (which needed diff-column detection in both afun and cfun).
+
+**Sorting Instruction**:
+- Programming notes specify sorting SOC by decreasing incidence in the "Both Sexes" column of the first stratum. This requires post-processing with `sort_at_path` and a score function that targets the correct column path.
+
+### Hypothesized Weaknesses Probed
+- **Adding PT level**: Assuming all AE tables have SOC→PT and adding a PT split that doesn't exist in the shell.
+- **Treatment-arm assumption**: Using ARM instead of STRATA1.
+- **Sort column path**: Targeting the wrong column for sorting (e.g., the first leaf column instead of the "Both Sexes" total column under stratum A).
+
+---
+
+## Shell T38: Sales Revenue by Region and Sales Channel
+
+### Structural Notes (from shell spec)
+- Non-pharma domain: retail analytics.
+- Column structure uses `grouped_cols_w_subgrps` with REGION as outer, CHANNEL as inner, "All Channels" as within-region total.
+- Row structure: split by PRODUCT → analyze REVENUE with custom afun producing 3 rows: Transactions (count), Total Revenue (sum), Mean Revenue (mean).
+- "Product" appears as a topleft label.
+- Synthetic dataset: 800 sales transactions with REGION, CHANNEL, PRODUCT, REVENUE.
+
+### Reasoning Paths Exercised
+
+**Domain Generalization — Non-Pharma `grouped_cols_w_subgrps`**:
+- This is the first non-pharma shell using `grouped_cols_w_subgrps`. REGION plays the role of the outer grouping variable, CHANNEL plays the role of the inner subgroup.
+- The terminology is entirely non-clinical: "Transactions" instead of "n", "Total Revenue" instead of "Sum", "Mean Revenue" instead of "Mean".
+
+**Custom Afun with Non-Standard Statistics**:
+- The afun must produce 3 rows with different statistics: count (integer), sum (decimal), mean (decimal). This requires a custom `in_rows()` call with mixed formats.
+- This tests whether the model can write a custom afun for non-clinical statistics rather than relying on `tern::a_summary` or junco analysis functions.
+
+**No alt_counts_df**:
+- Unlike clinical tables, there is no separate denominator dataset. Each row in the sales dataset is a transaction, and column N counts are derived from the analysis dataset itself.
+- The model must recognize that `alt_counts_df` is not needed here (no separate subject-level dataset).
+
+**Structural Similarity to T36**:
+- T38 has the same column topology as T36 (`grouped_cols_w_subgrps` with total), but with a different domain, different outer/inner variables, and a custom afun instead of a standard continuous summary.
+
+### Hypothesized Weaknesses Probed
+- **Clinical vocabulary dependency**: Failing to map "Region" → `trtvar`, "Channel" → `subgrp_var` because the model's pattern matching is anchored to clinical terminology.
+- **Using tern/junco afuns**: Attempting to use `tern::a_summary` or junco analysis functions for non-standard statistics (Transactions, Total Revenue, Mean Revenue) that don't map to any existing `.stats` option.
+- **Unnecessary alt_counts_df**: Providing an `alt_counts_df` that doesn't exist or isn't needed.
+- **Data fabrication**: The model must create a synthetic dataset. Failure to include all required columns (REGION, CHANNEL, PRODUCT, REVENUE) would break the table.
+
+---
+
+## Updated Coverage Matrix (T33–T38)
+
+| Shell | Col Struct | Row Struct | Select Afuns | Custom Afuns | Sort/Prune | Key Reasoning Traps |
+|-------|-----------|-----------|-------------|-------------|-----------|-------------------|
+| T33   | `grouped_cols_w_diffs` (COUNTRY) | PARAMCD→AVISIT→continuous | Conditional diff afun | Tier 3 dispatch (blank n/Median in diff cols) | — | Non-ARM `trt_var`; blank span; conditional diff blanking; wrong data source (`pharmaverseadamjnj` vs `formatters::ex_*`); `propose_column_widths()` |
+| T34   | `grouped_cols_w_diffs` (STRATA1) | SOC→PT with `summarize_row_groups` | afun + cfun both with diff detection | — | Yes (sort by ref stratum) | Non-ARM `trt_var`; cfun diff wiring; no conditional blanking (contrast with T33) |
+| T35   | `grouped_cols_w_diffs` (FACTORY) | Overall + category breakdown | afun + cfun both with diff detection | — | — | Non-pharma domain; synthetic data fabrication; `alt_counts_df` semantics outside clinical context |
+| T36   | `grouped_cols_w_subgrps` (STRATA1×SEX) | Single analyze (continuous) | `tern::a_summary` or equivalent | — | — | Non-ARM `trtvar`; over-engineering trap (no diff cols); Total placement |
+| T37   | `grouped_cols_w_subgrps` (STRATA1×SEX) | Overall + SOC only (no PT) | afun + cfun (count-percent) | — | Yes (sort by Both Sexes col) | Non-ARM `trtvar`; SOC-only depth; sort column path targeting |
+| T38   | `grouped_cols_w_subgrps` (REGION×CHANNEL) | PRODUCT→custom 3-row afun | Custom revenue afun | Tier 3 (Transactions/Total Rev/Mean Rev) | — | Non-pharma domain; synthetic data; custom non-clinical afun; no `alt_counts_df` needed |
+
+### Adversarial Design Principles (T33–T38)
+
+These shells target the following categories of reasoning failure:
+
+1. **Treatment-Arm Fixation** (T33, T34, T36, T37): The model assumes that column grouping variables must be treatment arms (ARM, TRT01A, TRT01P). These shells use COUNTRY, STRATA1, and SEX as grouping variables, testing whether the model reads the shell's actual column labels rather than defaulting to treatment arms.
+
+2. **Domain Transfer** (T35, T38): The model's pattern matching is anchored to clinical trial terminology ("subjects", "TEAEs", "SOC", "ADSL"). These shells use manufacturing QC and retail analytics domains, testing whether the model can transfer structural patterns (grouped columns, alt_counts_df, custom afuns) to non-clinical contexts.
+
+3. **Conditionality Calibration** (T33 vs T34): T33 requires conditional blanking in diff columns (n and Median blank); T34 does not (all rows populated). Presented together, they test whether the model correctly assesses conditionality per shell rather than applying a blanket rule from one shell to another.
+
+4. **Hierarchy Depth Reading** (T37 vs T34): T34 has SOC→PT; T37 has SOC only. The model must read the shell's actual row depth rather than assuming all AE tables have SOC→PT.
+
+5. **Data Source Awareness** (T33, T35, T38): T33 requires `formatters::ex_adlb`/`ex_adsl` (not `pharmaverseadamjnj`). T35 and T38 require synthetic datasets. The model must recognize when standard clinical data packages are insufficient and create appropriate data.
+
+
+---
+
+## Shell T39: Laboratory Values with Multiple Control Arms and Combo Active Level
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_diffs` with DOSE as the grouping variable (mapped from ARM). **Two** control groups: Placebo and Low Dose. One real active: High Dose.
+- **Combination level**: "Any Active" (valname = "ANY_ACTIVE") pools Low Dose + High Dose via `combo_map_df` with `is_control = FALSE`, placing it under the "Active Arms" span alongside High Dose.
+- Default comparison behavior: each active arm (High Dose, Any Active) compared against each control arm (Placebo, Low Dose) → 2 × 2 = 4 difference columns.
+- Note: Low Dose appears in BOTH the `non_active_grp` vector (as a control) AND the combo's `levelcombo` (as a constituent of "Any Active"). This is intentionally adversarial — the model must not assume that control levels are excluded from combo membership.
+- The `message("none of the combination levels appeared in the colspan treatment map; adding them automatically.")` fires at build time because the combo level is not pre-added to the colspan_trt_map. This is the standard `grouped_cols_w_diffs` behavior, not an error.
+- Row structure: PARAMCD → AVISIT → continuous summary (n, Mean (SD), Median). Difference columns blank for n and Median rows.
+- Data source: `formatters::ex_adlb` and `formatters::ex_adsl` (not `pharmaverseadamjnj`).
+
+### Reasoning Paths Exercised
+
+**Column Structure — `grouped_cols_w_diffs` with Multiple Controls + `combo_map_df`**:
+- This is the primary target. The model must pass a **vector** to `non_active_grp` in `create_colspan_var` / `create_colspan_map`: `non_active_grp = c("Placebo", "Low Dose")`. Most existing shells and examples use a single scalar control.
+- The model must construct `combo_map_df` as a data.frame with the correct 5 columns (`valname`, `label`, `levelcombo`, `exargs`, `is_control`) where `levelcombo` is a list-column and `exargs` is a list-column. Getting the `I(list(...))` wrapping wrong is a common error.
+- The model must understand that `is_control = FALSE` places the combo under the active span, and that the default comparison behavior produces the Cartesian product of active × control arms.
+
+**Conditional Diff-Column Blanking**:
+- Same pattern as T33: the afun must check `.spl_context$cur_col_split_val[[1]][1] == diffs_label` and emit `rcell(NULL)` for n and Median rows in diff columns.
+
+**Data Prep — ARM-to-DOSE Mapping**:
+- The model must derive a DOSE factor from ARM via `case_when` and apply it to both ADLB and ADSL before calling `create_colspan_var`. Factor levels must be set explicitly: `c("Placebo", "Low Dose", "High Dose")`.
+
+### Hypothesized Weaknesses Probed
+- **Scalar `non_active_grp`**: Passing only `"Placebo"` instead of `c("Placebo", "Low Dose")`, producing 2 diff columns instead of 4.
+- **`combo_map_df` construction errors**: Forgetting `I(list(...))` on `levelcombo` or `exargs`, producing a flat character column instead of a list-column. Or forgetting the `is_control` column entirely (which defaults to FALSE but should be explicit).
+- **Control-in-combo confusion**: Assuming that Low Dose cannot appear in both `non_active_grp` and the combo's `levelcombo`, and either removing it from one or the other.
+- **Missing diff blanking**: Populating all diff-column cells including n and Median.
+- **Wrong data source**: Using `pharmaverseadamjnj` data (which has no DOSE variable and different ARM levels).
+
+---
+
+## Shell T40: AE Incidence by Dose Level with Active-vs-Active Comparison and Combo Active Level
+
+### Structural Notes (from shell spec)
+- Column structure uses `grouped_cols_w_diffs` with DOSE as the grouping variable. One control: Placebo. Two real active: Low Dose, High Dose.
+- **Combination level**: "Any Active" (valname = "ANY_ACTIVE") pools Low Dose + High Dose via `combo_map_df` with `is_control = FALSE`.
+- **Explicit `comp_map`** overrides default comparison behavior. Three specific comparisons: High Dose vs Placebo (standard active-vs-control), Any Active vs Placebo (combo-vs-control), and High Dose vs Low Dose (active-vs-active). Low Dose gets no difference column of its own.
+- The `comp_map` data.frame has 4 required columns: `active`, `comparator`, `active_is_combo`, `comparator_is_combo`. The ANY_ACTIVE row must set `active_is_combo = TRUE`.
+- Row structure: overall count → SOC (AEBODSYS) → PT (AEDECOD), using split_rows_by + summarize_row_groups at each level. All rows populated in diff columns (no conditional blanking).
+- Data source: `formatters::ex_adae` and `formatters::ex_adsl`.
+
+### Reasoning Paths Exercised
+
+**Column Structure — `comp_map` for Selective Comparisons**:
+- This is the primary target. The model must know that `comp_map` exists as a parameter of `grouped_cols_w_diffs` and construct it correctly. No existing test shell exercises `comp_map`.
+- The model must understand that `comp_map` overrides the default all-active-vs-all-control Cartesian product. Without `comp_map`, the default would produce 3 active × 1 control = 3 diffs (Low Dose vs Placebo, High Dose vs Placebo, Any Active vs Placebo). With `comp_map`, the model selects exactly 3 different comparisons, replacing "Low Dose vs Placebo" with "High Dose vs Low Dose" (active-vs-active).
+- The `active_is_combo` column must be TRUE for the ANY_ACTIVE row and FALSE for the others. Getting this wrong may cause `make_multicomp_splfun` to fail or produce incorrect column labels.
+
+**Column Structure — `combo_map_df` + `comp_map` Together**:
+- Both `combo_map_df` and `comp_map` are passed simultaneously to `grouped_cols_w_diffs`. The model must understand that `combo_map_df` defines the virtual level (adding it to the column tree) while `comp_map` controls which comparisons appear in the diff section. These are orthogonal concerns.
+
+**Active-vs-Active Comparison**:
+- "High Dose vs Low Dose" is an active-vs-active comparison where the comparator (Low Dose) is itself an active arm, not a control. The model must recognize that `comp_map` allows any level as a comparator, not just levels in `non_active_grp`.
+
+**Row Structure — SOC→PT with Diff Columns (No Conditional Blanking)**:
+- Unlike T39, all rows (overall, SOC, PT) have diff-column values. The afun and cfun must emit incidence difference format strings in diff columns for every row.
+- This contrasts with T39's conditional blanking and tests whether the model correctly assesses conditionality per shell.
+
+### Hypothesized Weaknesses Probed
+- **Not knowing `comp_map` exists**: Using default comparison behavior (which produces Low Dose vs Placebo instead of High Dose vs Low Dose) because the model doesn't know about the `comp_map` parameter.
+- **`comp_map` construction errors**: Missing the `active_is_combo` or `comparator_is_combo` columns. Or using the combo's `label` ("Any Active") instead of its `valname` ("ANY_ACTIVE") in the `active` column.
+- **Active-vs-active conceptual block**: Assuming that comparators must always be control arms, and not placing "Low Dose" in the `comparator` column because it's an active arm.
+- **Applying T39's blanking logic**: Incorrectly blanking some rows in diff columns because the model carries over the conditional blanking pattern from T39.
+- **`combo_map_df` without `comp_map`**: Providing `combo_map_df` but forgetting `comp_map`, which would produce the default 3×1 = 3 comparisons instead of the specified 3.
+
+---
+
+## Updated Coverage Matrix (T39–T40)
+
+| Shell | Col Struct | Row Struct | Select Afuns | Custom Afuns | Sort/Prune | Key Reasoning Traps |
+|-------|-----------|-----------|-------------|-------------|-----------|-------------------|
+| T39   | `grouped_cols_w_diffs` (DOSE) + multi-control vector + `combo_map_df` | PARAMCD→AVISIT→continuous | Conditional diff afun | Tier 3 dispatch (blank n/Median in diff cols) | — | Vector `non_active_grp`; `combo_map_df` construction (`I(list(...))`); control-level-in-combo overlap; 2×2 Cartesian diff product; `propose_column_widths()` |
+| T40   | `grouped_cols_w_diffs` (DOSE) + `combo_map_df` + `comp_map` | SOC→PT with `summarize_row_groups` | afun + cfun both with diff detection | — | Yes (sort by Placebo col) | `comp_map` existence and construction; `active_is_combo` flag; active-vs-active comparison; `combo_map_df` + `comp_map` together; `valname` vs `label` in `comp_map` |
+
+### Additional Gap Coverage (T39–T40)
+
+| Gap | Covered By |
+|-----|-----------|
+| `non_active_grp` as a vector (multiple control groups) | T39 |
+| `combo_map_df` with `is_control = FALSE` (combo active level) | T39, T40 |
+| `combo_map_df` `I(list(...))` list-column construction | T39, T40 |
+| Control level appearing in combo's `levelcombo` | T39 |
+| `comp_map` parameter of `grouped_cols_w_diffs` | T40 |
+| Active-vs-active comparison via `comp_map` | T40 |
+| `active_is_combo` / `comparator_is_combo` flags in `comp_map` | T40 |
+| `combo_map_df` + `comp_map` used simultaneously | T40 |
+| `valname` (not `label`) as the identifier in `comp_map` | T40 |
+| Cartesian product of active × control in diff section (2×2) | T39 |
+| Selective comparison override (non-default diff column set) | T40 |
+
+### Adversarial Design Principles (T39–T40)
+
+These shells target the following categories of reasoning failure:
+
+1. **Parameter Arity Assumptions** (T39): The model assumes `non_active_grp` is always a scalar string. T39 requires a character vector of length 2, which changes the colspan_trt_map structure and the number of diff columns.
+
+2. **Advanced `grouped_cols_w_diffs` Feature Awareness** (T40): The model may know `grouped_cols_w_diffs` but not know about `comp_map`, which is a less commonly used parameter that enables selective and non-standard comparisons. T40 requires the model to discover and correctly construct `comp_map`.
+
+3. **Combo Level Mechanics** (T39, T40): Both shells require `combo_map_df` with correct list-column construction. T39 additionally tests the edge case where a control level is a constituent of an active combo. T40 tests using the combo's `valname` (not `label`) in `comp_map`.
+
+4. **Conditionality Calibration** (T39 vs T40): T39 requires conditional blanking in diff columns (n and Median blank); T40 does not (all rows populated). Presented together, they test whether the model correctly assesses conditionality per shell.

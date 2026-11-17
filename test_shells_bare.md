@@ -448,24 +448,22 @@ Programming Notes:
 ```
 TIRADA-DIFF: [Continuous Response] by ADA Status; Full Analysis Set
 
-—————————————————————————————————————————————————————————————————————————————————————————————————————————————
-                                               Peak Titers for Subjects Positive for
-                                                   Treatment-emergent Antibodies          Difference (95% CI)
-              Negative for   Positive for
-               Treatment-     Treatment-                                                       Positive vs
-                emergent       emergent                                                        Negative
-               Antibodies     Antibodies         <10         10 to <100       >=100
-Time Point        N=XXX           N=XXX           N=XXX            N=XXX           N=XXX              N=XXX
-—————————————————————————————————————————————————————————————————————————————————————————————————————————————
+————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                                        Difference (95% CI)
+                                             Peak Titers for Subjects Positive for          Positive vs
+                                                 Treatment-emergent Antibodies                Negative
+               Negative      Positive          <10         10 to <100       >=100       Positive vs Negative
+Time Point       N=XXX          N=XXX           N=XXX            N=XXX           N=XXX              N=XXX
+————————————————————————————————————————————————————————————————————————————————————————————————————————————
 Week 4
-  N                xx             xx             xx              xx             xx
-  Mean (SD)   xx.x (xx.x)    xx.x (xx.x)     xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x - xx.x)
-  Median          xx.x           xx.x           xx.x            xx.x           xx.x
+  n               xx            xx              xx              xx             xx
+  Mean (SD)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x - xx.x)
+  Median          xx.x          xx.x           xx.x            xx.x           xx.x
 Week 12
-  N                xx             xx             xx              xx             xx
-  Mean (SD)   xx.x (xx.x)    xx.x (xx.x)     xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x - xx.x)
-  Median          xx.x           xx.x           xx.x            xx.x           xx.x
-—————————————————————————————————————————————————————————————————————————————————————————————————————————————
+  n               xx            xx              xx              xx             xx
+  Mean (SD)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x)    xx.x (xx.x - xx.x)
+  Median          xx.x          xx.x           xx.x            xx.x           xx.x
+————————————————————————————————————————————————————————————————————————————————————————————————————————————
 
 Note: Difference column shows mean difference (95% CI) of Positive vs Negative for Treatment-emergent Antibodies.
 ```
@@ -1021,3 +1019,274 @@ Programming Notes:
 5. Observed SOCs under TEAEs Leading to Discontinuation by SOC are displayed in alphabetical order within each sex subgroup.
 6. Count-percent cells with zero counts should be displayed as "0".
 
+
+---
+
+## Shell T33: Laboratory Values by Country with Difference vs CHN
+
+```
+TSFLB-CTRY: Laboratory Values by Country with Difference; Safety Analysis Set
+
+——————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                     Difference (95% CI)
+                      Other Countries                                      vs CHN
+                     USA           JPN           CHN           USA vs CHN           JPN vs CHN
+Parameter           N=XXX         N=XXX         N=XXX             N=XXX                N=XXX
+——————————————————————————————————————————————————————————————————————————————————————————————————
+ALT
+  BASELINE
+    n                xx            xx            xx
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+    Median          xx.x          xx.x          xx.x
+  WEEK 1 DAY 8
+    n                xx            xx            xx
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+    Median          xx.x          xx.x          xx.x
+CRP
+  BASELINE
+    n                xx            xx            xx
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+    Median          xx.x          xx.x          xx.x
+  WEEK 1 DAY 8
+    n                xx            xx            xx
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+    Median          xx.x          xx.x          xx.x
+——————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Difference shows mean difference (95% CI) of each country vs CHN.
+```
+
+Programming Notes:
+1. Source dataset: ADLB (from formatters::ex_adlb) with alt_counts_df = ADSL (from formatters::ex_adsl). Filter to PARAMCD %in% c("ALT", "CRP"), AVISIT %in% c("BASELINE", "WEEK 1 DAY 8"), COUNTRY %in% c("CHN", "USA", "JPN").
+2. Grouping variable is COUNTRY (not treatment arm). Reference group: CHN.
+3. Difference columns show mean difference (95% CI) vs CHN for each non-reference country.
+4. Difference columns are blank for n and Median rows.
+
+---
+
+## Shell T34: AE Incidence by Stratification Factor with Difference
+
+```
+TSFAE-STRATA: TEAEs by Stratification Factor; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                       Incidence Difference (%)
+                              Other Strata                                   (95% CI) vs A
+                             B            C            A              B vs A               C vs A
+                           N=XXX        N=XXX        N=XXX            N=XXX                N=XXX
+———————————————————————————————————————————————————————————————————————————————————————————————————————
+Subjects with >=1 TEAE   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+  SOC1                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+        PT1              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+        PT2              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+  SOC2                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+        PT1              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx.x (xx.x - xx.x)   xx.x (xx.x - xx.x)
+———————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Incidence difference shows each stratum vs A (reference).
+```
+
+Programming Notes:
+1. Source dataset: ADAE (from formatters::ex_adae) with alt_counts_df = ADSL (from formatters::ex_adsl).
+2. Grouping variable is STRATA1 (stratification factor, not treatment arm). Reference: Stratum A.
+3. Incidence differences use the Wald method.
+4. Sort SOC and PT by decreasing incidence within the reference stratum.
+
+---
+
+## Shell T35: Product Defect Rates by Factory with Difference
+
+```
+QCDEF01: Product Defect Rates by Factory; All Inspected Items
+
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                             Rate Difference (%)
+                         Comparison Factories                                     (95% CI)
+                        Factory B    Factory C    Factory A    Factory B vs Factory A   Factory C vs Factory A
+                          N=XXX        N=XXX        N=XXX              N=XXX                    N=XXX
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Items with >=1 defect   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)     xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)
+  Cosmetic              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)     xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)
+  Structural            xx (xx.x%)   xx (xx.x%)   xx (xx.x%)     xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)
+  Electrical            xx (xx.x%)   xx (xx.x%)   xx (xx.x%)     xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Rate difference shows each comparison factory minus Factory A (reference).
+```
+
+Programming Notes:
+1. Domain: Manufacturing quality control (non-pharma). Synthetic dataset.
+2. Source dataset: Defect event dataset (one row per item-defect) with alt_counts_df = item-level inspection dataset (one row per item).
+3. Grouping variable is FACTORY. Reference: Factory A.
+4. Each item counted once per defect type. Percentages based on total items inspected per factory.
+
+---
+
+## Shell T36: Vital Signs by Stratum Subdivided by Sex
+
+```
+TSFVS-STRATA: Diastolic Blood Pressure by Stratum and Sex; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                               A                                         B                                         C
+                             N=XXX                                     N=XXX                                     N=XXX
+                              SEX                                       SEX                                       SEX
+               Total           F             M           Total           F             M           Total           F             M
+               N=XXX         N=XXX         N=XXX         N=XXX         N=XXX         N=XXX         N=XXX         N=XXX         N=XXX
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+n               xx            xx            xx            xx            xx            xx            xx            xx            xx
+Mean (SD)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)
+Median         xx.x          xx.x          xx.x          xx.x          xx.x          xx.x          xx.x          xx.x          xx.x
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+```
+
+Programming Notes:
+1. Source dataset: ADVS (from formatters::ex_advs) with alt_counts_df = ADSL (from formatters::ex_adsl). Filter to PARAMCD == "DIABP", AVISIT == "WEEK 1 DAY 8", SEX %in% c("F", "M").
+2. Outer grouping variable is STRATA1 (stratification factor, not treatment arm).
+3. Inner subgroup variable is SEX. Total column includes both sexes within each stratum.
+
+---
+
+## Shell T37: AE Incidence by Stratum and Sex
+
+```
+TSFAE-STRATA-SEX: TEAEs by Stratum and Sex; Safety Analysis Set
+
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                          A                                      B                                      C
+                                        N=XXX                                  N=XXX                                  N=XXX
+                                         SEX                                    SEX                                    SEX
+                         Both Sexes       F            M        Both Sexes       F            M        Both Sexes       F            M
+                           N=XXX         N=XXX        N=XXX       N=XXX         N=XXX        N=XXX       N=XXX         N=XXX        N=XXX
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Subjects with >=1 TEAE   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)
+  SOC1                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)
+  SOC2                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)
+———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Percentages based on column N within each stratum-sex combination.
+```
+
+Programming Notes:
+1. Source dataset: ADAE (from formatters::ex_adae) with alt_counts_df = ADSL (from formatters::ex_adsl). Filter to SEX %in% c("F", "M").
+2. Outer grouping variable is STRATA1 (not treatment arm). Inner subgroup: SEX.
+3. "Both Sexes" is the within-stratum total column.
+4. Sort SOC by decreasing incidence in the "Both Sexes" column of the first stratum.
+
+---
+
+## Shell T38: Sales Revenue by Region and Sales Channel
+
+```
+SLSREV01: Revenue by Region and Sales Channel; All Transactions
+
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                North America                                    Europe                                    Asia-Pacific
+                                    N=XXX                                        N=XXX                                        N=XXX
+                                   CHANNEL                                      CHANNEL                                      CHANNEL
+                  All Channels   Online   Retail   Wholesale   All Channels   Online   Retail   Wholesale   All Channels   Online   Retail   Wholesale
+Product              N=XXX        N=XXX    N=XXX     N=XXX        N=XXX        N=XXX    N=XXX     N=XXX        N=XXX        N=XXX    N=XXX     N=XXX
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Widget A
+  Transactions        xx           xx       xx        xx           xx           xx       xx        xx           xx           xx       xx        xx
+  Total Revenue      xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+  Mean Revenue       xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+Widget B
+  Transactions        xx           xx       xx        xx           xx           xx       xx        xx           xx           xx       xx        xx
+  Total Revenue      xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+  Mean Revenue       xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+Gadget X
+  Transactions        xx           xx       xx        xx           xx           xx       xx        xx           xx           xx       xx        xx
+  Total Revenue      xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+  Mean Revenue       xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x         xx.x         xx.x     xx.x      xx.x
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Revenue in USD. Each transaction counted once.
+```
+
+Programming Notes:
+1. Domain: Retail analytics (non-pharma). Synthetic dataset.
+2. Outer grouping variable is REGION. Inner subgroup: CHANNEL.
+3. "All Channels" is the within-region total column.
+4. No difference or comparison columns.
+
+---
+
+## Shell T39: Laboratory Values with Multiple Control Arms and Combo Active Level
+
+```
+TSFLB-MCTRL: Laboratory Values with Multiple Control Arms; Safety Analysis Set
+
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                        Active Arms                Control Arms                                            Mean Difference (95% CI)                                   
+                  High Dose    Any Active      Placebo      Low Dose     High Dose vs Placebo   Any Active vs Placebo   High Dose vs Low Dose   Any Active vs Low Dose
+Parameter           N=XXX         N=XXX         N=XXX         N=XXX             N=XXX                   N=XXX                   N=XXX                   N=XXX         
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+ALT                                                                                                                                                                   
+  BASELINE                                                                                                                                                            
+    n                xx            xx            xx            xx                                                                                                     
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)  
+    Median          xx.x          xx.x          xx.x          xx.x                                                                                                    
+  WEEK 1 DAY 8                                                                                                                                                        
+    n                xx            xx            xx            xx                                                                                                     
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)  
+    Median          xx.x          xx.x          xx.x          xx.x                                                                                                    
+CRP                                                                                                                                                                   
+  BASELINE                                                                                                                                                            
+    n                xx            xx            xx            xx                                                                                                     
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)  
+    Median          xx.x          xx.x          xx.x          xx.x                                                                                                    
+  WEEK 1 DAY 8                                                                                                                                                        
+    n                xx            xx            xx            xx                                                                                                     
+    Mean (SD)    xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)   xx.x (xx.x)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)       xx.x (xx.x - xx.x)  
+    Median          xx.x          xx.x          xx.x          xx.x                                                                                                    
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Differences show mean difference (95% CI) of each active arm vs each control arm.
+```
+
+Programming Notes:
+1. Source dataset: ADLB (from formatters::ex_adlb) with alt_counts_df = ADSL (from formatters::ex_adsl). Filter to PARAMCD %in% c("ALT", "CRP"), AVISIT %in% c("BASELINE", "WEEK 1 DAY 8"). ARM mapped to DOSE: "B: Placebo" → "Placebo", "A: Drug X" → "Low Dose", "C: Combination" → "High Dose".
+2. Grouping variable is DOSE. **Two** control groups: c("Placebo", "Low Dose"). One real active: "High Dose".
+3. **Combination level**: "Any Active" (valname = "ANY_ACTIVE") pools Low Dose + High Dose. `is_control = FALSE` places it under the active span.
+4. Column structure uses `grouped_cols_w_diffs` with `non_active_grp = c("Placebo", "Low Dose")`, `combo_map_df` defining the "Any Active" combo. Non-active span is "Control Arms". Active span is "Active Arms" over High Dose and Any Active.
+5. Default comparison behavior: each active arm (High Dose, Any Active) compared against each control arm (Placebo, Low Dose) → 2 × 2 = 4 difference columns.
+6. `combo_map_df` is a data.frame with columns: `valname`, `label`, `levelcombo` (list-column), `exargs` (list-column), `is_control`. One row: `("ANY_ACTIVE", "Any Active", c("Low Dose", "High Dose"), list(), FALSE)`.
+7. Difference columns show mean difference (95% CI). Blank for n and Median rows.
+8. Use `propose_column_widths()` to prevent cell truncation.
+
+---
+
+## Shell T40: AE Incidence by Dose Level with Active-vs-Active Comparison and Combo Active Level
+
+```
+TSFAE-DOSE: TEAEs by Dose Level with Active-vs-Active Comparison; Safety Analysis Set
+
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                                                                                                   Incidence Difference (%)                      
+                                     Active Arms                                                           (95% CI)                              
+                          Low Dose    High Dose    Any Active    Placebo     High Dose vs Placebo   Any Active vs Placebo   High Dose vs Low Dose
+                           N=XXX        N=XXX        N=XXX        N=XXX             N=XXX                   N=XXX                   N=XXX        
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+Subjects with >=1 TEAE   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+  SOC1                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+        PT1              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+        PT2              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+  SOC2                   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+        PT1              xx (xx.x%)   xx (xx.x%)   xx (xx.x%)   xx (xx.x%)    xx.x (xx.x - xx.x)     xx.x (xx.x - xx.x)      xx.x (xx.x - xx.x)  
+—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Note: Differences show High Dose vs Placebo, Any Active vs Placebo, and High Dose vs Low Dose.
+```
+
+Programming Notes:
+1. Source dataset: ADAE (from formatters::ex_adae) with alt_counts_df = ADSL (from formatters::ex_adsl). ARM mapped to DOSE: "B: Placebo" → "Placebo", "A: Drug X" → "Low Dose", "C: Combination" → "High Dose".
+2. Grouping variable is DOSE. One control: "Placebo". Two real active: "Low Dose", "High Dose".
+3. **Combination level**: "Any Active" (valname = "ANY_ACTIVE") pools Low Dose + High Dose. `is_control = FALSE` places it under the active span.
+4. Column structure uses `grouped_cols_w_diffs` with `non_active_grp = "Placebo"`, `combo_map_df` defining the "Any Active" combo, and an **explicit `comp_map`** that overrides default comparison behavior. Non-active span is blank (" "). Active span is "Active Arms" over Low Dose, High Dose, and Any Active.
+5. `comp_map` selects exactly 3 comparisons (not the default 3 × 1 = 3): High Dose vs Placebo, Any Active vs Placebo, and High Dose vs Low Dose (active-vs-active). Low Dose gets no difference column of its own.
+6. `comp_map` is a data.frame with columns: `active`, `comparator`, `active_is_combo`, `comparator_is_combo`. Three rows: `("High Dose", "Placebo", FALSE, FALSE)`, `("ANY_ACTIVE", "Placebo", TRUE, FALSE)`, `("High Dose", "Low Dose", FALSE, FALSE)`.
+7. `combo_map_df` is a data.frame with columns: `valname`, `label`, `levelcombo` (list-column), `exargs` (list-column), `is_control`. One row: `("ANY_ACTIVE", "Any Active", c("Low Dose", "High Dose"), list(), FALSE)`.
+8. Row structure: overall count → SOC (AEBODSYS) → PT (AEDECOD), using split_rows_by + summarize_row_groups at each level.
+9. Incidence differences use the Wald method.
+10. Sort SOC and PT by decreasing incidence within the Placebo column.

@@ -147,16 +147,16 @@ Implementation Guidance: Because the child columns under `Risk Differences` do n
 
 #### 3. Direct Siblings Will Be Semantically Related
 
-**Direct siblings are intended to be understood in the context of each other**, either as:
-- groups/cohorts to be compared (as when splitting on treatment arm), or
-- complementary measures to be considered together (as with a `Mean`, `SD` pair of columns).
+**Direct siblings are intended to be understood in the context of each other.** There are three distinct sibling relationship types, each mapping to a different `rtables` mechanism:
 
-For example, `All Active` is semantically parallel to individual treatment arms (a cohort of subjects analyzed alongside the individual arms):
+**Type A — Levels of a single categorical variable** (groups/cohorts to be compared):
 
 ```text
    A: Drug X   B: Placebo   C: Combination   All Active
 ———————————————————————————————————————————————————————
 ```
+
+`All Active` is semantically parallel to individual treatment arms — a cohort of subjects analyzed alongside the individual arms.
 
 Implementation Guidance: Interpret `All Active` as a virtual combination arm within the `ARM` split:
 
@@ -171,7 +171,53 @@ basic_table() |>
   split_cols_by("ARM", split_fun = add_combo_levels(combodf))
 ```
 
-**Key Takeaway**: Consider whether labels appearing directly adjacent to each other are related semantically when determining whether they should be siblings in the same split (`add_combo_levels` / `add_overall_level`) vs. separate non-nested splits.
+**Type B — Multiple variables or measures for the same entity** (complementary aspects to be considered together):
+
+```text
+           A: Drug X                          B: Placebo                  
+     Level   Change From Baseline       Level   Change From Baseline     
+———————————————————————————————————————————————————————————————————————
+```
+
+`Level` and `Change From Baseline` are not levels of a single factor — they are labels for *different analysis variables* (e.g., `AVAL` and `CHG`) that together describe the same treatment arm. They are siblings because they are complementary measures of the same parent entity.
+
+Implementation Guidance: Use `split_cols_by_multivar` nested inside the arm split:
+
+```r
+basic_table() |>
+  split_cols_by("ARM") |>
+  split_cols_by_multivar(c("AVAL", "CHG"), varlabels = c("Level", "Change From Baseline"))
+```
+
+**Type C — Overlapping / non-mutually-exclusive subsets of the same entity** (a total alongside a filtered subset):
+
+```text
+      Xanomeline High Dose         Xanomeline Low Dose                Placebo          
+   All Grades   High Toxicity   All Grades   High Toxicity   All Grades   High Toxicity
+———————————————————————————————————————————————————————————————————————————————————————
+```
+
+`All Grades` and `High Toxicity` are not mutually exclusive categories — a subject with a Grade 4 AE appears in *both* columns. They are siblings because they represent complementary *scopes* of the same analysis for the same treatment arm: the full population alongside a clinically relevant subset.
+
+Implementation Guidance: Use `some_v_all_col_struct` (or `make_split_fun(post = list(add_overall_facet(...), add_combo_facet(...), restrict_facets(...)))`):
+
+```r
+basic_table() |>
+  some_v_all_col_struct(
+    colspan_trt_map,
+    subgrp_var = "AETOXGR",
+    subgrp_lvls = c("4", "5"),
+    all_lbl = "All Grades",
+    subgrp_lbl = "High Toxicity"
+  )
+```
+
+**How to distinguish the three types**:
+- **Type A**: Sibling labels name *subpopulations or categories of the same kind*. A single subject belongs to exactly one sibling (mutually exclusive). → `split_cols_by` with `add_combo_levels` / `add_overall_level`.
+- **Type B**: Sibling labels name *different measurements, statistics, or analysis variables*. A single subject contributes to *every* sibling. The siblings analyze different columns of the data. → `split_cols_by_multivar`.
+- **Type C**: Sibling labels name *overlapping population scopes* — typically a total/"all" column alongside a filtered subset (e.g., "All AEs" vs "Drug-Related AEs", "All Grades" vs "High Toxicity"). A single subject may appear in more than one but not necessarily all siblings. The siblings analyze the same variable on overlapping subsets. → `some_v_all_col_struct` / `add_combo_facet` + `add_overall_facet`.
+
+**Key Takeaway**: Consider whether labels appearing directly adjacent to each other are related semantically when determining whether they should be siblings in the same split (`add_combo_levels` / `add_overall_level` for Type A, `split_cols_by_multivar` for Type B, `some_v_all_col_struct` for Type C) vs. separate non-nested splits.
 
 #### 4. Interpret Fully Left-Justified / Far-Left Labels as "Top-Left" Materials
 
@@ -194,6 +240,42 @@ Implementation Guidance: Ignore the far-left `STRATA1` label in the header when 
 basic_table() |>
   split_cols_by("ARM") ## top-left population left for row structure / append_topleft()
 ```
+
+### 2.3 Mandatory Semantic Coherence Validation Gate
+
+After inferring the column tree (whether via the Decision Matrix in 2.1 or Semantic Decoding in 2.2), **validate the tree before proceeding to implementation**. For every parent node (spanning label) in the inferred tree, ask:
+
+> *"Does every child of this node semantically belong to the concept named by the parent label?"*
+
+If any child fails this test, the tree is wrong. The most common failure mode is assigning a column to a visible spanning label it does not semantically belong to, when it should instead be under a **blank spanning label** (`" "`) that is a sibling of the visible span.
+
+**Concrete diagnostic examples:**
+
+*Failures (child does NOT belong under parent):*
+
+| Inferred Parent | Child That Fails Semantic Test | Why It Fails | Correct Structure |
+| :--- | :--- | :--- | :--- |
+| `"Active Treatment"` | `"Placebo"` | Placebo is not an active treatment | `"Placebo"` belongs under a blank span `" "`, sibling of `"Active Treatment"` |
+| `"Baseline"` | `"N"` | A count column is not a baseline grade/category | `"N"` belongs under a blank span `" "`, sibling of `"Baseline"` |
+| `"Risk Difference (%) (95% CI)"` | `"A: Drug X"` (as a treatment-count column) | A treatment arm's count column is not a risk difference | Treatment columns belong under the treatment spanning structure, not the difference branch |
+| `"Male"` | `"Mean (SD)"` alongside `"Drug A"`, `"Drug B"` | A statistic label is not a treatment arm level | Likely a nesting error — `"Mean (SD)"` may belong at a different tree depth |
+
+*Passes (children DO belong under parent — including multi-variable siblings):*
+
+| Inferred Parent | Children | Why They Pass | Sibling Type (Section 2.2 Rule 3) |
+| :--- | :--- | :--- | :--- |
+| `"A: Drug X"` | `"Level"`, `"Change From Baseline"` | Both are measurements/analyses *of* Drug X subjects | Type B — multiple variables (`split_cols_by_multivar`) |
+| `"A: Drug X"` | `"n/N (%)"`, `"Mean (95% CI)"`, `"Mean CFB (95% CI)"` | All are summary statistics for the same arm | Type B — multiple variables (`split_cols_by_multivar`) |
+| `"Active Treatment"` | `"Drug X"`, `"Drug Y"`, `"All Active"` | All are active treatment cohorts | Type A — levels of a categorical variable |
+| `"Baseline"` | `"Grade 1"`, `"Grade 2"`, `"Grade 3"`, `"Total"` | All are baseline grade categories (Total is an overall level) | Type A — levels of a categorical variable |
+| `"Xanomeline High Dose"` | `"All Grades"`, `"High Toxicity"` | Both are AE severity scopes *for* that arm (total vs. subset) | Type C — overlapping subsets (`some_v_all_col_struct`) |
+
+**When the test fails**, do not attempt to force the child under the visible span. Instead:
+1. Remove the misassigned child from the visible span's children.
+2. Determine whether the child belongs under a **blank spanning label** at the same depth (most common — see Section 2.2 Rule 1 Case B) or in a **separate non-nested sibling branch** (see Section 2.2 Rule 2).
+3. Re-check the corrected tree: all sibling groups should now be semantically coherent (all treatment arms together, all statistics together, all comparison labels together, etc.).
+
+This validation is especially critical for shells extracted from PDFs or raw text, where visual alignment is ambiguous and the semantic test is more reliable than positional reasoning.
 
 ---
 
